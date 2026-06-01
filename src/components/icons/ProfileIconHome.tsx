@@ -1,0 +1,41 @@
+import React from 'react';
+import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
+
+export default function ProfileIconHome() {
+  return (
+    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <G clipPath="url(#clip0_13095_2951)">
+        <Path
+          d="M12.0002 23.2998C18.241 23.2998 23.3002 18.263 23.3002 12.0498C23.3002 5.8366 18.241 0.799805 12.0002 0.799805C5.75938 0.799805 0.700195 5.8366 0.700195 12.0498C0.700195 18.263 5.75938 23.2998 12.0002 23.2998Z"
+          stroke="#222222"
+          strokeWidth="1.48878"
+          strokeMiterlimit="10"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <Path
+          d="M12 14.937C8.5 14.937 5.5 16.9282 4 19.9149C6 22.0056 8.9 23.2003 12 23.2003C15.1 23.2003 18 21.906 20 19.9149C18.5 17.0277 15.5 14.937 12 14.937Z"
+          stroke="#222222"
+          strokeWidth="1.48878"
+          strokeMiterlimit="10"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <Path
+          d="M12.0004 12.3478C13.9886 12.3478 15.6004 10.7432 15.6004 8.76376C15.6004 6.78433 13.9886 5.17969 12.0004 5.17969C10.0122 5.17969 8.40039 6.78433 8.40039 8.76376C8.40039 10.7432 10.0122 12.3478 12.0004 12.3478Z"
+          stroke="#222222"
+          strokeWidth="1.48878"
+          strokeMiterlimit="10"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </G>
+      <Defs>
+        <ClipPath id="clip0_13095_2951">
+          <Rect width="24" height="24" fill="white" />
+        </ClipPath>
+      </Defs>
+    </Svg>
+  );
+}
+

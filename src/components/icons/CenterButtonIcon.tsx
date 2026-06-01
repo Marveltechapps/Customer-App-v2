@@ -1,0 +1,20 @@
+import React from 'react';
+import Svg, { Path } from 'react-native-svg';
+
+interface CenterButtonIconProps {
+  color?: string;
+  width?: number;
+  height?: number;
+}
+
+export default function CenterButtonIcon({ color = '#034703', width = 36, height = 7.11 }: CenterButtonIconProps) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 36 7.11" fill="none">
+      <Path
+        d="M23.7432 3.5332C21.9096 3.5332 20.5788 4.89498 19.6631 6.42285C19.1128 7.34049 16.8873 7.34042 16.3369 6.42285C15.4212 4.89497 14.0904 3.5332 12.2568 3.5332H3.8916C1.7423 3.53306 0 1.95114 0 0H36C36 1.95114 34.2577 3.53306 32.1084 3.5332H23.7432Z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+

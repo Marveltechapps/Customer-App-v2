@@ -1,0 +1,160 @@
+# OSX
+#
+.DS_Store
+
+# Xcode
+#
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata
+*.xccheckout
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.xcuserstate
+**/.xcode.env.local
+
+# Android/IntelliJ
+#
+build/
+.idea
+.gradle
+local.properties
+*.iml
+*.hprof
+.cxx/
+*.keystore
+!debug.keystore
+.kotlin/
+
+# node.js
+#
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# fastlane
+#
+# It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the
+# screenshots whenever they are needed.
+# For more information about the recommended setup visit:
+# https://docs.fastlane.tools/best-practices/source-control/
+
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+
+# Bundle artifact
+*.jsbundle
+
+# Ruby / CocoaPods
+**/Pods/
+/vendor/bundle/
+
+# Temporary files created by Metro to check the health of the file watcher
+.metro-health-check*
+
+# testing
+/coverage
+
+# Yarn
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Backend
+backend/dist
+backend/node_modules
+backend/.env
+
+# IDE / editor (not needed for production)
+.vscode/
+*.swp
+*.swo
+*~
+
+# Cursor
+.cursor/
+.cursorrules
+.cursorignore
+
+# Expo (local cache / dev)
+.expo/
+
+# Logs and temp
+*.log
+*.tmp
+*.temp
+
+# OS
+Thumbs.db
+
+# Local Ruby / Bundler
+.bundle/
+
+# App build outputs (binaries)
+apk/
+*.apk
+
+# Dev / tooling (not needed for production)
+postman/
+scripts/
+shell-commands/
+
+# Build output
+dist/
+web-build/
+*.tsbuildinfo
+
+# Tests
+__tests__/
+src/test-utils/
+jest.config.js
+jest.setup.js
+/coverage/
+
+# Linting & formatting configs
+.eslintrc.js
+.prettierrc.js
+.lintstagedrc.js
+commitlint.config.js
+
+# Git hooks
+.husky/
+
+# CI/CD workflows
+.github/
+
+# Watchman
+.watchmanconfig
+
+# Ruby (CocoaPods dependency manager)
+Gemfile
+Gemfile.lock
+
+# Internal documentation
+HOME_SCREEN_DYNAMIC_ELEMENTS.md
+
+# Android build artifacts
+*.aab
+
+# EAS / Expo build
+.easignore
+eas.json
