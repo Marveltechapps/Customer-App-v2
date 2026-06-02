@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,32 @@ import MapPinIcon from '../../assets/images/map-pin-4-alt.svg';
 import { useLocation } from '../../contexts/LocationContext';
 import { logger } from '@/utils/logger';
 import { getApiErrorMessage } from '../../services/api/types';
-import { addressService } from '../../services/address/addressService';
+import { notifyAddressesChanged } from '../../utils/addressRefresh';
+import {
+  addressService,
+  type Address,
+  type CreateAddressPayload,
+  type UpdateAddressPayload,
+} from '../../services/address/addressService';
+import { addressToLocationData, formatAddressLines } from '../../utils/addressLocationSync';
+
+function formatFormAddressLines(form: {
+  houseNo: string;
+  building: string;
+  landmark: string;
+  city: string;
+  state: string;
+  pincode: string;
+}): string {
+  return formatAddressLines({
+    line1: form.houseNo,
+    line2: form.building,
+    landmark: form.landmark,
+    city: form.city,
+    state: form.state,
+    pincode: form.pincode,
+  });
+}
 
 interface AddressFormData {
   houseNo: string;
@@ -34,10 +59,18 @@ interface AddressFormData {
 
 const ADDRESS_LABELS = ['Home', 'Work', 'Other'] as const;
 
+function finalLabelForDisplay(label: string, customLabel: string): string {
+  if (label === 'Other') {
+    return customLabel.trim() || 'Other';
+  }
+  return label;
+}
+
 const EnterCompleteAddress: React.FC = () => {
   const navigation = useNavigation<LocationStackNavigationProp>();
   const route = useRoute();
   const { setLocation } = useLocation();
+  const lastSavedAddressRef = useRef<Address | null>(null);
 
   const params = route.params as {
     location?: {
@@ -111,30 +144,54 @@ const EnterCompleteAddress: React.FC = () => {
   };
 
   const handleSave = async () => {
-    const line1 = formData.houseNo.trim();
-    if (!line1) {
-      Alert.alert('Required', 'Please enter house number / floor.');
-      return;
-    }
-
+    const isEditMode = Boolean(editAddressId);
     const finalLabel =
       formData.label === 'Other' ? (customLabel.trim() || 'Other') : formData.label;
 
+    let line1: string;
+    let line2: string | undefined;
+    let landmark: string | undefined;
+    let city: string;
+    let state: string | undefined;
+    let pincode: string | undefined;
+
+    if (isEditMode) {
+      line1 = formData.houseNo.trim();
+      if (!line1) {
+        Alert.alert('Required', 'Please enter house number / floor.');
+        return;
+      }
+      line2 = formData.building.trim() || undefined;
+      landmark = formData.landmark.trim() || undefined;
+      city = formData.city.trim() || location.city || 'Unknown';
+      state = formData.state.trim() || undefined;
+      pincode = formData.pincode.trim() || undefined;
+    } else {
+      line1 = location.address?.trim() || location.title?.trim() || 'Address';
+      landmark = location.area?.trim() || undefined;
+      city = location.city?.trim() || 'Unknown';
+      state = location.state?.trim() || undefined;
+      pincode = location.pincode?.trim() || undefined;
+    }
+
     setSaving(true);
     try {
-      const payload: Record<string, any> = {
+      const payload: CreateAddressPayload = {
         label: finalLabel,
         line1,
-        line2: formData.building.trim() || undefined,
-        landmark: formData.landmark.trim() || undefined,
-        city: formData.city.trim() || location.city || 'Unknown',
-        state: formData.state.trim() || undefined,
-        pincode: formData.pincode.trim() || undefined,
+        line2,
+        landmark,
+        city,
+        state,
+        pincode,
         isDefault: formData.isDefault,
+        ...((location as { latitude?: number }).latitude != null && {
+          latitude: (location as { latitude?: number }).latitude,
+        }),
+        ...((location as { longitude?: number }).longitude != null && {
+          longitude: (location as { longitude?: number }).longitude,
+        }),
       };
-
-      if ((location as any).latitude != null) payload.latitude = (location as any).latitude;
-      if ((location as any).longitude != null) payload.longitude = (location as any).longitude;
 
       let savedAddress;
       if (editAddressId) {
@@ -151,17 +208,18 @@ const EnterCompleteAddress: React.FC = () => {
         savedAddress = res.data;
       }
 
-      // If this is the default address, update the LocationContext
-      if (savedAddress && (savedAddress.isDefault || !editAddressId)) {
-        const parts = [savedAddress.line1, savedAddress.line2, savedAddress.landmark, savedAddress.city, savedAddress.state, savedAddress.pincode].filter(Boolean);
-        setLocation({
-          latitude: savedAddress.latitude || 0,
-          longitude: savedAddress.longitude || 0,
-          address: parts.join(', '),
-          area: savedAddress.city || '',
-          city: savedAddress.city || '',
-          granted: true,
-        });
+      // DB write completed above; notify uses server-returned document for on-screen sync.
+      if (savedAddress) {
+        lastSavedAddressRef.current = savedAddress;
+        setLocation(addressToLocationData(savedAddress));
+        notifyAddressesChanged({ type: 'upsert', address: savedAddress });
+      }
+
+      if (editAddressId) {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+          return;
+        }
       }
 
       setShowSuccess(true);
@@ -182,16 +240,197 @@ const EnterCompleteAddress: React.FC = () => {
 
   const handleSuccessDone = () => {
     setShowSuccess(false);
+    if (lastSavedAddressRef.current) {
+      notifyAddressesChanged({ type: 'upsert', address: lastSavedAddressRef.current });
+    }
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
     navigation.navigate('SavedAddressesList');
   };
 
   const isOtherActive = formData.label === 'Other' ||
     (!['Home', 'Work'].includes(formData.label) && formData.label !== 'Other');
+  const isEditMode = Boolean(editAddressId);
+
+  const cardTitle = isEditMode
+    ? finalLabelForDisplay(formData.label, customLabel)
+    : location.title;
+  const cardAddress = isEditMode
+    ? formatFormAddressLines(formData) || location.address
+    : location.address;
+
+  const locationCard = (
+    <View style={styles.locationCard}>
+      <View style={styles.locationCardContent}>
+        <View style={styles.locationIconContainer}>
+          <MapPinIcon width={20} height={20} />
+        </View>
+        <View style={styles.locationTextContainer}>
+          <View style={styles.locationTitleContainer}>
+            <Text style={styles.locationTitle}>{cardTitle}</Text>
+          </View>
+          <View style={styles.locationAddressContainer}>
+            <Text style={styles.locationAddress} numberOfLines={3}>
+              {cardAddress}
+            </Text>
+          </View>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={styles.changeButton}
+        onPress={handleChangeLocation}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.changeButtonText}>Change</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const addressFieldsCard = (
+    <View style={styles.formCard}>
+      <View style={styles.inputContainer}>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>House No. & Floor *</Text>
+        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter Details"
+          placeholderTextColor="#6B6B6B"
+          value={formData.houseNo}
+          onChangeText={(value) => handleInputChange('houseNo', value)}
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Building & Block No.</Text>
+        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter Details"
+          placeholderTextColor="#6B6B6B"
+          value={formData.building}
+          onChangeText={(value) => handleInputChange('building', value)}
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Landmark & Area name (Optional)</Text>
+        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter Details"
+          placeholderTextColor="#6B6B6B"
+          value={formData.landmark}
+          onChangeText={(value) => handleInputChange('landmark', value)}
+        />
+      </View>
+
+      <View style={styles.inputContainer}>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>City</Text>
+        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter City"
+          placeholderTextColor="#6B6B6B"
+          value={formData.city}
+          onChangeText={(value) => handleInputChange('city', value)}
+        />
+      </View>
+
+      <View style={styles.rowInputs}>
+        <View style={[styles.inputContainer, { flex: 1 }]}>
+          <View style={styles.labelContainer}>
+            <Text style={styles.label}>State</Text>
+          </View>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter State"
+            placeholderTextColor="#6B6B6B"
+            value={formData.state}
+            onChangeText={(value) => handleInputChange('state', value)}
+          />
+        </View>
+        <View style={[styles.inputContainer, { flex: 1 }]}>
+          <View style={styles.labelContainer}>
+            <Text style={styles.label}>Pincode</Text>
+          </View>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter Pincode"
+            placeholderTextColor="#6B6B6B"
+            value={formData.pincode}
+            onChangeText={(value) => handleInputChange('pincode', value)}
+            keyboardType="number-pad"
+            maxLength={6}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
+  const labelAndDefaultSection = (
+    <>
+      <View style={styles.labelCard}>
+        <View style={styles.labelSectionHeader}>
+          <Text style={styles.labelSectionTitle}>Add Address Label</Text>
+        </View>
+        <View style={styles.labelButtonsContainer}>
+          {ADDRESS_LABELS.map((label) => {
+            const isActive =
+              label === 'Other' ? isOtherActive : formData.label === label;
+            return (
+              <TouchableOpacity
+                key={label}
+                style={[styles.labelButton, isActive && styles.labelButtonActive]}
+                onPress={() => handleLabelSelect(label)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.labelButtonText,
+                    isActive && styles.labelButtonTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {isOtherActive && (
+          <TextInput
+            style={styles.customLabelInput}
+            placeholder="Enter custom label"
+            placeholderTextColor="#6B6B6B"
+            value={customLabel}
+            onChangeText={setCustomLabel}
+            maxLength={30}
+          />
+        )}
+      </View>
+
+      <TouchableOpacity
+        style={styles.defaultCheckboxContainer}
+        onPress={() => setFormData((prev) => ({ ...prev, isDefault: !prev.isDefault }))}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.checkbox, formData.isDefault && styles.checkboxActive]}>
+          {formData.isDefault && <View style={styles.checkboxInner} />}
+        </View>
+        <Text style={styles.defaultCheckboxText}>Set as default address</Text>
+      </TouchableOpacity>
+    </>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <Header title="Enter complete address" />
+      <Header title={isEditMode ? 'Update address' : 'Save delivery address'} />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -199,170 +438,9 @@ const EnterCompleteAddress: React.FC = () => {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.contentContainer}>
-          {/* Location Card */}
-          <View style={styles.locationCard}>
-            <View style={styles.locationCardContent}>
-              <View style={styles.locationIconContainer}>
-                <MapPinIcon width={20} height={20} />
-              </View>
-              <View style={styles.locationTextContainer}>
-                <View style={styles.locationTitleContainer}>
-                  <Text style={styles.locationTitle}>{location.title}</Text>
-                </View>
-                <View style={styles.locationAddressContainer}>
-                  <Text style={styles.locationAddress} numberOfLines={2}>
-                    {location.address}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.changeButton}
-              onPress={handleChangeLocation}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.changeButtonText}>Change</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Form Fields */}
-          <View style={styles.formCard}>
-            <View style={styles.inputContainer}>
-              <View style={styles.labelContainer}>
-                <Text style={styles.label}>House No. & Floor *</Text>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Details"
-                placeholderTextColor="#6B6B6B"
-                value={formData.houseNo}
-                onChangeText={(value) => handleInputChange('houseNo', value)}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <View style={styles.labelContainer}>
-                <Text style={styles.label}>Building & Block No.</Text>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Details"
-                placeholderTextColor="#6B6B6B"
-                value={formData.building}
-                onChangeText={(value) => handleInputChange('building', value)}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <View style={styles.labelContainer}>
-                <Text style={styles.label}>Landmark & Area name (Optional)</Text>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Details"
-                placeholderTextColor="#6B6B6B"
-                value={formData.landmark}
-                onChangeText={(value) => handleInputChange('landmark', value)}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <View style={styles.labelContainer}>
-                <Text style={styles.label}>City</Text>
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter City"
-                placeholderTextColor="#6B6B6B"
-                value={formData.city}
-                onChangeText={(value) => handleInputChange('city', value)}
-              />
-            </View>
-
-            <View style={styles.rowInputs}>
-              <View style={[styles.inputContainer, { flex: 1 }]}>
-                <View style={styles.labelContainer}>
-                  <Text style={styles.label}>State</Text>
-                </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter State"
-                  placeholderTextColor="#6B6B6B"
-                  value={formData.state}
-                  onChangeText={(value) => handleInputChange('state', value)}
-                />
-              </View>
-              <View style={[styles.inputContainer, { flex: 1 }]}>
-                <View style={styles.labelContainer}>
-                  <Text style={styles.label}>Pincode</Text>
-                </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter Pincode"
-                  placeholderTextColor="#6B6B6B"
-                  value={formData.pincode}
-                  onChangeText={(value) => handleInputChange('pincode', value)}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* Address Label Selection */}
-          <View style={styles.labelCard}>
-            <View style={styles.labelSectionHeader}>
-              <Text style={styles.labelSectionTitle}>Add Address Label</Text>
-            </View>
-            <View style={styles.labelButtonsContainer}>
-              {ADDRESS_LABELS.map((label) => {
-                const isActive =
-                  label === 'Other' ? isOtherActive : formData.label === label;
-                return (
-                  <TouchableOpacity
-                    key={label}
-                    style={[
-                      styles.labelButton,
-                      isActive && styles.labelButtonActive,
-                    ]}
-                    onPress={() => handleLabelSelect(label)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.labelButtonText,
-                        isActive && styles.labelButtonTextActive,
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            {isOtherActive && (
-              <TextInput
-                style={styles.customLabelInput}
-                placeholder="Enter custom label"
-                placeholderTextColor="#6B6B6B"
-                value={customLabel}
-                onChangeText={setCustomLabel}
-                maxLength={30}
-              />
-            )}
-          </View>
-
-          {/* Set as Default Checkbox */}
-          <TouchableOpacity
-            style={styles.defaultCheckboxContainer}
-            onPress={() => setFormData(prev => ({ ...prev, isDefault: !prev.isDefault }))}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.checkbox, formData.isDefault && styles.checkboxActive]}>
-              {formData.isDefault && <View style={styles.checkboxInner} />}
-            </View>
-            <Text style={styles.defaultCheckboxText}>Set as default address</Text>
-          </TouchableOpacity>
+          {locationCard}
+          {isEditMode && addressFieldsCard}
+          {labelAndDefaultSection}
 
           {/* Save Button */}
           <TouchableOpacity
@@ -402,7 +480,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingVertical: 20,
     paddingHorizontal: 16,
-    gap: 24,
+    gap: 16,
   },
   locationCard: {
     backgroundColor: '#FFFFFF',
@@ -556,7 +634,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 4,
+    marginTop: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10.5,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
   checkbox: {
     width: 20,

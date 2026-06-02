@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import type { LocationStackNavigationProp } from '../../types/navigation';
 import Header from '../../components/layout/Header';
 import SearchIcon from '../../assets/images/search-icon.svg';
@@ -18,6 +19,7 @@ import CurrentLocationIcon from '../../assets/images/current-location-icon.svg';
 import MapPinIcon from '../../assets/images/map-pin.svg';
 import { addressService, Address } from '../../services/address/addressService';
 import { logger } from '@/utils/logger';
+import { subscribeAddressesChanged } from '../../utils/addressRefresh';
 
 const TAG_ICON: Record<string, string> = {
   Home: '🏠',
@@ -31,26 +33,32 @@ const LocationSearch: React.FC = () => {
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      const fetchSavedAddresses = async () => {
-        setLoading(true);
-        try {
-          const response = await addressService.getAll();
-          if (response.success && response.data) {
-            setSavedAddresses(response.data);
-          }
-        } catch (error) {
-          logger.error('Error fetching saved addresses', error);
-          setSavedAddresses([]);
-        } finally {
-          setLoading(false);
-        }
-      };
+  const fetchSavedAddresses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await addressService.getAll();
+      if (response.success && response.data) {
+        setSavedAddresses(response.data);
+      } else {
+        setSavedAddresses([]);
+      }
+    } catch (error) {
+      logger.error('Error fetching saved addresses', error);
+      setSavedAddresses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-      fetchSavedAddresses();
-    }, [])
-  );
+  useRefreshOnFocus(() => {
+    void fetchSavedAddresses();
+  }, [fetchSavedAddresses]);
+
+  useEffect(() => {
+    return subscribeAddressesChanged(() => {
+      void fetchSavedAddresses();
+    });
+  }, [fetchSavedAddresses]);
 
   const handleSearch = (text: string) => {
     setSearchQuery(text);

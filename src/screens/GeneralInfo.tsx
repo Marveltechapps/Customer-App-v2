@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -36,29 +37,21 @@ const GeneralInfo: React.FC = () => {
   const [generalInfoItems, setGeneralInfoItems] = useState<GeneralInfoItemData[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Placeholder for API call - Replace with actual API later
-  useEffect(() => {
-    const fetchGeneralInfoItems = async () => {
-      setLoading(true);
-      try {
-        // TODO: Replace with actual API call
-        // const response = await fetch('/api/general-info');
-        // const data = await response.json();
-        // setGeneralInfoItems(data.items);
-
-        // Using dummy data for now
-        setGeneralInfoItems(DUMMY_GENERAL_INFO_ITEMS);
-      } catch (error) {
-        logger.error('Error fetching general info items', error);
-        // Fallback to dummy data
-        setGeneralInfoItems(DUMMY_GENERAL_INFO_ITEMS);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchGeneralInfoItems();
+  const fetchGeneralInfoItems = useCallback(async () => {
+    setLoading(true);
+    try {
+      setGeneralInfoItems(DUMMY_GENERAL_INFO_ITEMS);
+    } catch (error) {
+      logger.error('Error fetching general info items', error);
+      setGeneralInfoItems(DUMMY_GENERAL_INFO_ITEMS);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useRefreshOnFocus(() => {
+    void fetchGeneralInfoItems();
+  }, [fetchGeneralInfoItems]);
 
   const handleItemPress = (item: GeneralInfoItemData) => {
     if (item.title === 'Terms & Conditions') {

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { getHomeConfig, saveHomeConfig, type HomeConfig } from '@/services/adminCms/adminCmsService';
@@ -8,22 +9,21 @@ export default function HomeConfigTab() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const cfg = await getHomeConfig();
-        if (mounted) setForm(cfg || {});
-      } catch (e: any) {
-        Toast.show({ type: 'error', text1: e?.message || 'Failed to load home config' });
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
+  const loadHomeConfig = useCallback(async () => {
+    setLoading(true);
+    try {
+      const cfg = await getHomeConfig();
+      setForm(cfg || {});
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: e?.message || 'Failed to load home config' });
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useRefreshOnFocus(() => {
+    void loadHomeConfig();
+  }, [loadHomeConfig]);
 
   const save = async () => {
     setSaving(true);

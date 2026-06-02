@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import { View, StyleSheet, StatusBar, Platform, ScrollView, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -40,6 +41,13 @@ export default function SearchResultsScreen({
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const { updateQuantity, removeFromCart, getLineQuantity } = useCart();
+  const [focusRefreshNonce, setFocusRefreshNonce] = useState(0);
+
+  useRefreshOnFocus(() => {
+    if (searchText.trim().length > 0) {
+      setFocusRefreshNonce((n) => n + 1);
+    }
+  }, [searchText]);
 
   // API integration
   useEffect(() => {
@@ -91,7 +99,7 @@ export default function SearchResultsScreen({
     };
     const debounceTimer = setTimeout(loadProducts, 300);
     return () => clearTimeout(debounceTimer);
-  }, [searchText, fetchProducts]);
+  }, [searchText, fetchProducts, focusRefreshNonce]);
 
   const handleBack = useCallback(() => {
     navigation.goBack();

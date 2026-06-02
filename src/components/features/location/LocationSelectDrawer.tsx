@@ -16,6 +16,7 @@ import { addressService, type Address } from '../../../services/address/addressS
 import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { logger } from '@/utils/logger';
+import { notifyAddressesChanged, subscribeAddressesChanged } from '../../../utils/addressRefresh';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const DRAWER_MAX_HEIGHT = SCREEN_HEIGHT * 0.55;
@@ -141,19 +142,34 @@ export default function LocationSelectDrawer({
     closeDrawer();
   }, [visible, rendered, closeDrawer]);
 
+  useEffect(() => {
+    return subscribeAddressesChanged(() => {
+      void loadAddresses();
+    });
+  }, [loadAddresses]);
+
   const handleSelect = useCallback(
     async (address: Address) => {
       setSelectedId(address._id);
       try {
+        let selected = address;
         if (!address.isDefault) {
-          await addressService.setDefault(address._id);
+          const res = await addressService.setDefault(address._id);
+          if (res?.success && res.data) {
+            selected = res.data;
+          } else {
+            selected = { ...address, isDefault: true };
+          }
+          await loadAddresses();
+          notifyAddressesChanged({ type: 'upsert', address: selected });
         }
+        onSelect(selected);
       } catch (err) {
         logger.warn('Failed to set default address', err);
+        onSelect(address);
       }
-      onSelect(address);
     },
-    [onSelect]
+    [loadAddresses, onSelect],
   );
 
   if (!rendered) return null;

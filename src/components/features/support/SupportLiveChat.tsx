@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -95,12 +96,17 @@ const SupportLiveChat: React.FC<SupportLiveChatProps> = ({ headerTitle, ticket }
     setLoading(false);
   }, [ensureTicket, fetchMessages]);
 
-  useEffect(() => {
-    startChat();
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [startChat]);
+  useFocusEffect(
+    useCallback(() => {
+      void startChat();
+      return () => {
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      };
+    }, [startChat]),
+  );
 
   const displayMessages = useMemo(() => {
     if (messages.length > 0) return messages;

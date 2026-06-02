@@ -13,6 +13,8 @@ export interface CategoryPayloadSubCategory {
   name: string;
   slug: string;
   imageUrl: string | null;
+  thumbnailUrl?: string | null;
+  cardImageUrl?: string | null;
 }
 
 export interface CategoryPayloadBanner {
@@ -39,6 +41,9 @@ export interface CategoryPayloadProductVariant {
 export interface CategoryPayloadProduct {
   id: string;
   name: string;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  cardImageUrl?: string | null;
   images: string[];
   price: number;
   originalPrice?: number;

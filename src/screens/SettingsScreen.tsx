@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useRefreshAppConfigOnFocus } from '../hooks/useRefreshAppConfigOnFocus';
 import type { RootStackNavigationProp } from '../types/navigation';
 import Header from '../components/layout/Header';
 import ChevronRightIcon from '../assets/images/chevron-right.svg';
@@ -50,6 +51,8 @@ interface SettingsProps {
 const SettingsScreen: React.FC<SettingsProps> = ({ onLogout }) => {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { setUser } = useUser();
+
+  useRefreshAppConfigOnFocus();
 
   const handleItemPress = (itemId: string) => {
     switch (itemId) {

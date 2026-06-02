@@ -6,10 +6,9 @@
  * - Products & categories: `thumbnailUrl` → `cardImageUrl` → `images[0]` → `imageUrl` → nested `image`
  * - Banners: `bannerImageUrl` → `thumbnailUrl` → `imageUrl` → `uri` → nested `image`
  *
- * Falls back to configurable placeholder from AppConfig when nothing resolves.
+ * Returns empty string when no catalog URL resolves (no bundled placeholders).
  */
 import {
-  getPlaceholderUrl,
   imageSourceFromResolvedUrl,
   isRemotePlaceholderServiceUrl,
   shouldUseLocalPlaceholder,
@@ -38,7 +37,7 @@ export function getImageFitFromUrl(url: string | null | undefined): ImageFit {
 
 export function buildRetriableImageUrl(url: string, attempt: number): string {
   const trimmed = typeof url === 'string' ? url.trim() : '';
-  if (!trimmed) return getPlaceholderUrl();
+  if (!trimmed) return '';
   if (shouldUseLocalPlaceholder(trimmed)) return trimmed;
 
   const safeAttempt = Math.max(0, attempt);
@@ -60,6 +59,21 @@ export function getRetryDelayMs(attempt: number): number {
   return Math.min(1000 * Math.pow(2, safeAttempt - 1), 3000);
 }
 
+/** HTTP status from CDN that means the catalog URL will not load — skip retries. */
+export function isUnreachableImageHttpStatus(status: number): boolean {
+  return status === 404 || status === 410 || status >= 500;
+}
+
+export function isPermanentImageLoadFailure(errorLike: unknown): boolean {
+  const text = String((errorLike as { message?: string })?.message ?? errorLike ?? '').toLowerCase();
+  if (!text) return false;
+  if (text.includes('404') || text.includes('410')) return true;
+  if (text.includes('status code 404') || text.includes('status code 410')) return true;
+  if (text.includes('status code 5')) return true;
+  if (text.includes('invalid response status code 5')) return true;
+  return false;
+}
+
 export function classifyImageNetworkError(errorLike: unknown): string {
   const text = String((errorLike as { message?: string })?.message ?? errorLike ?? '').toLowerCase();
   if (!text) return 'unknown';
@@ -78,6 +92,34 @@ export function classifyImageNetworkError(errorLike: unknown): string {
 }
 
 /** Decode each path segment fully, then re-encode (fixes %26 → %2526 from decodeURI). */
+/**
+ * SKU master import adds ?q=&w= for resizing; static CloudFront PNG/JPEG URLs often 500 with those params.
+ */
+export function stripStaticImageOptimizerParams(url: string): string {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return trimmed;
+  try {
+    const u = new URL(trimmed);
+    const path = u.pathname.toLowerCase();
+    const isStaticAsset = /\.(png|jpe?g|webp|gif|avif|bmp|svg)$/i.test(path);
+    const isCdnHost =
+      u.hostname.includes('cloudfront.net') ||
+      u.hostname.includes('amazonaws.com') ||
+      u.pathname.includes('/prod/products/');
+    if (isStaticAsset || isCdnHost) {
+      u.searchParams.delete('q');
+      u.searchParams.delete('w');
+    }
+    return u.toString();
+  } catch {
+    return trimmed
+      .replace(/([?&])q=\d+(&|$)/gi, '$2')
+      .replace(/([?&])w=\d+(&|$)/gi, '$2')
+      .replace(/\?&/, '?')
+      .replace(/[?&]$/, '');
+  }
+}
+
 export function normalizeMediaPathname(pathname: string): string {
   return pathname
     .split('/')
@@ -137,7 +179,7 @@ function resolveImageUrl(inputUrl: string): string | null {
         u.protocol = 'https:';
       }
       u.pathname = normalizeMediaPathname(u.pathname);
-      const normalizedAbsolute = u.toString();
+      const normalizedAbsolute = stripStaticImageOptimizerParams(u.toString());
       return rewriteLocalhostInMediaUrl(normalizedAbsolute);
     } catch {
       // Fall back to minimal safe encoding.
@@ -306,13 +348,26 @@ function pickRawImageUrl(p: ProductLikeImageInput): string | undefined {
 }
 
 /** Raw catalog image fields attached to product cards for master-sheet diagnostics. */
-export function productImageCatalogFromApi(p: ProductLikeImageInput | null | undefined) {
+export function productImageCatalogFromApi(
+  p: (ProductLikeImageInput & { variants?: Array<{ thumbnailUrl?: string; cardImageUrl?: string; imageUrl?: string; images?: string[] }> }) | null | undefined,
+) {
   if (!p) return undefined;
+  const firstVariant = Array.isArray(p.variants)
+    ? p.variants.find(
+        (v) =>
+          v?.imageUrl?.trim() ||
+          v?.thumbnailUrl?.trim() ||
+          v?.cardImageUrl?.trim() ||
+          (Array.isArray(v?.images) && v.images.length > 0),
+      )
+    : undefined;
   return {
-    thumbnailUrl: p.thumbnailUrl,
-    cardImageUrl: p.cardImageUrl,
-    imageUrl: p.imageUrl,
-    images: p.images,
+    thumbnailUrl: p.thumbnailUrl ?? firstVariant?.thumbnailUrl,
+    cardImageUrl: p.cardImageUrl ?? firstVariant?.cardImageUrl,
+    imageUrl: p.imageUrl ?? firstVariant?.imageUrl,
+    images:
+      Array.isArray(p.images) && p.images.length > 0 ? p.images : firstVariant?.images,
+    variants: p.variants,
   };
 }
 
@@ -320,30 +375,53 @@ export function productImageCatalogFromApi(p: ProductLikeImageInput | null | und
 export function getProductImageSource(
   p: ProductLikeImageInput | null | undefined,
 ): ImageSourcePropType {
-  return imageSourceFromResolvedUrl(getProductImageUrl(p));
+  const url = getProductImageUrl(p);
+  return imageSourceFromResolvedUrl(url);
+}
+
+/** All resolvable catalog image URLs (cleaned), best-first — no placeholder entries. */
+export function collectProductImageUrlCandidates(
+  p: ProductLikeImageInput | null | undefined,
+): string[] {
+  if (!p) return [];
+  const rawUrls: string[] = [];
+  const add = (s: unknown) => {
+    if (typeof s === 'string' && s.trim() && !isRemotePlaceholderServiceUrl(s.trim())) {
+      rawUrls.push(s.trim());
+    }
+  };
+  add(p.thumbnailUrl);
+  add(p.cardImageUrl);
+  if (Array.isArray(p.images)) {
+    for (const img of p.images) add(img);
+  }
+  add(p.imageUrl);
+  if (typeof p.image === 'string') add(p.image);
+  else if (p.image && typeof p.image === 'object' && 'uri' in p.image) add(p.image.uri);
+  add(p.thumbnail);
+
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+  for (const raw of rawUrls) {
+    const bare = stripStaticImageOptimizerParams(raw);
+    const resolved = resolveImageUrl(bare) ?? resolveImageUrl(raw);
+    if (!resolved || shouldUseLocalPlaceholder(resolved) || seen.has(resolved)) continue;
+    seen.add(resolved);
+    candidates.push(resolved);
+  }
+  return candidates;
 }
 
 export function getProductImageUrl(p: ProductLikeImageInput | null | undefined): string {
-  if (!p) return getPlaceholderUrl();
-  const url = pickRawImageUrl(p);
-
-  const resolved = typeof url === 'string' ? resolveImageUrl(url) : null;
-  if (resolved) {
-    logger.debug('Product image URL resolved', {
-      id: p.id ?? p._id,
-      name: p.name,
-      rawUrl: url,
-      resolvedUrl: resolved,
-    });
-    return resolved;
-  }
+  const candidates = collectProductImageUrlCandidates(p);
+  if (candidates.length > 0) return candidates[0];
 
   const stubUrls = collectStubImageUrls(p);
   const issue = stubUrls.length > 0 ? 'stub_url_in_catalog' : 'unresolved';
   logger.warn('[IMAGE_MASTER_SHEET] Product image missing — check catalog row', {
     ...buildProductImageMasterSheetRow(p, { issue }),
   });
-  return getPlaceholderUrl();
+  return '';
 }
 
 /** Cart line / order line payloads from API or optimistic cart state. */
@@ -365,7 +443,7 @@ function pickStringField(obj: unknown, key: string): string | undefined {
 
 /** Resolve a cart line's display image URL (same field order as catalog products). */
 export function resolveCartLineImageUrl(item: CartLineImageInput | null | undefined): string {
-  if (!item) return getPlaceholderUrl();
+  if (!item) return '';
 
   const imageObj = item.image;
   const nestedUri =

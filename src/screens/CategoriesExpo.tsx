@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, StatusBar, Platform, ScrollView, TouchableOpacity, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useCatalogCache } from '../contexts/CatalogCacheContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { RootStackNavigationProp } from '../types/navigation';
 import SearchIcon from '../components/icons/SearchIcon';
@@ -10,52 +11,7 @@ import CategoryCard from '../components/CategoryCard';
 import FloatingCartBar from '../components/features/cart/FloatingCartBar';
 import { useDimensions, getSpacing, scale } from '../utils/responsive';
 import { logger } from '@/utils/logger';
-import { homeService } from '../services/home/homeService';
-import { getProductImageSource } from '../utils/productImage';
-
-interface Category {
-  id: string;
-  name: string;
-  image: any;
-}
-
-interface CategoryGroup {
-  id: string;
-  title: string;
-  categories: Category[];
-}
-
-/** Map home API payload to CategoryGroup[] for this screen */
-async function fetchCategoryGroupsFromHome(): Promise<CategoryGroup[]> {
-  const res = await homeService.getHomePayload();
-  const data = res?.data ?? res;
-  const rawCategories = data?.categories ?? [];
-  const typeByKey = data?.typeByKey ?? {};
-  const sectionKey = Object.keys(typeByKey).find((k) => typeByKey[k] === 'super_category');
-  const sectionDef = sectionKey
-    ? (data?.config?.sectionDefinitions ?? []).find((d: any) => d.key === sectionKey)
-    : null;
-  const sectionTitle: string | undefined = sectionDef?.label;
-
-  // No hardcoded fallback titles. If dashboard section definitions are missing, render nothing.
-  if (!sectionTitle) return [];
-
-  if (!Array.isArray(rawCategories) || rawCategories.length === 0) {
-    return [{ id: 'main', title: sectionTitle, categories: [] }];
-  }
-
-  const categories: Category[] = rawCategories.map((c: any) => ({
-    id: String(c._id ?? c.id),
-    name: c.name ?? '',
-    image: getProductImageSource({
-      imageUrl: c.imageUrl,
-      name: c.name,
-      id: String(c._id ?? c.id ?? ''),
-    }),
-  }));
-
-  return [{ id: 'main', title: sectionTitle, categories }];
-}
+import type { CategoryGroup, CategoryListItem } from '../utils/catalogCacheLoaders';
 
 interface CategoriesScreenProps {
   fetchCategories?: () => Promise<CategoryGroup[]>;
@@ -69,8 +25,9 @@ export default function CategoriesScreen({
   onSearchPress,
 }: CategoriesScreenProps) {
   const navigation = useNavigation<RootStackNavigationProp>();
+  const { categoryGroups: cachedCategoryGroups, categoriesLoading, ensureCatalogLoaded } = useCatalogCache();
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+  const loading = categoriesLoading && (!cachedCategoryGroups || cachedCategoryGroups.length === 0);
   
   // Calculate responsive card width for 3-column grid
   const { width: screenWidth } = useDimensions();
@@ -95,30 +52,27 @@ export default function CategoriesScreen({
     }))
   ).current;
 
-  // Load categories from backend: use fetchCategories prop if provided, else home API
   useEffect(() => {
-    let cancelled = false;
-    const loadCategories = async () => {
-      setLoading(true);
-      try {
-        const data = fetchCategories
-          ? await fetchCategories()
-          : await fetchCategoryGroupsFromHome();
-        if (!cancelled) {
+    void ensureCatalogLoaded();
+  }, [ensureCatalogLoaded]);
+
+  useEffect(() => {
+    if (fetchCategories) {
+      void (async () => {
+        try {
+          const data = await fetchCategories();
           setCategoryGroups(Array.isArray(data) ? data : []);
+        } catch (error) {
+          logger.error('Error fetching categories', error);
+          setCategoryGroups([]);
         }
-      } catch (error) {
-        logger.error('Error fetching categories', error);
-        if (!cancelled) setCategoryGroups([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    loadCategories();
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchCategories]);
+      })();
+      return;
+    }
+    if (cachedCategoryGroups) {
+      setCategoryGroups(cachedCategoryGroups);
+    }
+  }, [fetchCategories, cachedCategoryGroups]);
 
   // Animate header and cards when screen is focused
   useFocusEffect(
@@ -236,7 +190,7 @@ export default function CategoriesScreen({
           {/* Category Groups */}
           {categoryGroups.map((group, groupIndex) => {
             // Group categories into rows of 3
-            const rows: Category[][] = [];
+            const rows: CategoryListItem[][] = [];
             for (let i = 0; i < group.categories.length; i += 3) {
               rows.push(group.categories.slice(i, i + 3));
             }

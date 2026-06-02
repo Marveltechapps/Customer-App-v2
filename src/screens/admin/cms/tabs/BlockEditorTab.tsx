@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -47,22 +48,20 @@ export default function BlockEditorTab({ initialPageId }: { initialPageId: strin
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [form, setForm] = useState<PageBlock | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const data = await listPages();
-        setPages(data);
-      } catch (e: any) {
-        Toast.show({ type: 'error', text1: e?.message || 'Failed to load pages' });
-      }
-    })();
+  const loadPagesList = useCallback(async () => {
+    try {
+      const data = await listPages();
+      setPages(data);
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: e?.message || 'Failed to load pages' });
+    }
   }, []);
 
   useEffect(() => {
     if (initialPageId) setSelectedPageId(initialPageId);
   }, [initialPageId]);
 
-  const loadPage = async (id: string) => {
+  const loadPage = useCallback(async (id: string) => {
     if (!id) return;
     setLoading(true);
     try {
@@ -78,11 +77,16 @@ export default function BlockEditorTab({ initialPageId }: { initialPageId: strin
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useRefreshOnFocus(() => {
+    void loadPagesList();
+    if (selectedPageId) void loadPage(selectedPageId);
+  }, [loadPagesList, loadPage, selectedPageId]);
 
   useEffect(() => {
     if (selectedPageId) void loadPage(selectedPageId);
-  }, [selectedPageId]);
+  }, [selectedPageId, loadPage]);
 
   const persist = async (nextBlocks: PageBlock[]) => {
     if (!page?._id) return;

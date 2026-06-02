@@ -43,7 +43,7 @@ import { CartProvider } from '@/contexts/CartContext';
 import { NetworkProvider, useNetwork } from './src/contexts/NetworkContext';
 import { UserProvider } from './src/contexts/UserContext';
 import { LocationProvider } from './src/contexts/LocationContext';
-import { HomeProvider } from './src/contexts/HomeContext';
+import { HomeProvider } from './src/contexts/CatalogCacheContext';
 import { AppConfigProvider } from './src/contexts/AppConfigContext';
 import ErrorBoundary from './src/components/common/ErrorBoundary';
 import { setupGlobalErrorHandler } from './src/utils/errorHandler';

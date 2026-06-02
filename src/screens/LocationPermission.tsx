@@ -22,6 +22,8 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { addressService } from '../services/address/addressService';
 import { logger } from '@/utils/logger';
 import { navigationFlags } from '../utils/navigationFlags';
+import { notifyAddressesChanged } from '../utils/addressRefresh';
+import { addressToLocationData } from '../utils/addressLocationSync';
 
 type LocationPermissionRouteProp = RouteProp<RootStackParamList, 'LocationPermission'>;
 
@@ -33,7 +35,7 @@ const LocationPermission: React.FC = () => {
   const route = useRoute<LocationPermissionRouteProp>();
   const fromAuth = route.params?.fromAuth ?? false;
   const { width } = useDimensions();
-  const { requestLocationPermission, getCurrentLocation, loading } = useLocation();
+  const { requestLocationPermission, getCurrentLocation, loading, setLocation } = useLocation();
 
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [fetchError, setFetchError] = useState(false);
@@ -199,7 +201,7 @@ const LocationPermission: React.FC = () => {
 
     setSaving(true);
     try {
-      await addressService.create({
+      const res = await addressService.create({
         label,
         line1: mapLocation.address || `${mapLocation.latitude.toFixed(6)}, ${mapLocation.longitude.toFixed(6)}`,
         city: mapLocation.city || 'Unknown',
@@ -210,6 +212,10 @@ const LocationPermission: React.FC = () => {
             longitude: mapLocation.longitude,
           }),
       });
+      if (res?.success && res.data) {
+        await setLocation(addressToLocationData(res.data));
+        notifyAddressesChanged({ type: 'upsert', address: res.data });
+      }
       navigateForward();
     } catch (error) {
       logger.error('Failed to save address', error);

@@ -2,39 +2,33 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { View, StyleSheet, StatusBar, Text, ScrollView, Animated, NativeScrollEvent, NativeSyntheticEvent, Easing, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useCatalogCache } from '../contexts/CatalogCacheContext';
 import type { RootStackNavigationProp } from '../types/navigation';
 import TopSection from '../components/layout/TopSection';
 import FloatingCartBar from '../components/features/cart/FloatingCartBar';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 import LocationSelectDrawer from '../components/features/location/LocationSelectDrawer';
-import type { Address } from '../services/address/addressService';
-import { logger } from '@/utils/logger';
-import { homeService } from '../services/home/homeService';
 import { blockRegistry } from '../blocks/blockRegistry';
-import { addressService } from '../services/address/addressService';
-import { getApiErrorMessage } from '../services/api/types';
+import { addressService, type Address } from '../services/address/addressService';
+import { subscribeAddressesChanged } from '../utils/addressRefresh';
+import {
+  addressToLocationData,
+  formatAddressLines,
+  pickDefaultAddress,
+} from '../utils/addressLocationSync';
 import { useLocation } from '../contexts/LocationContext';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useCart } from '@/contexts/CartContext';
 import { navigationFlags } from '../utils/navigationFlags';
 import { getEnvConfigSafe } from '../config/env';
-import { couponService, Coupon } from '../services/coupons/couponService';
-import processLegacyHomeBanners from '../utils/enrichHomeBannerBlocks';
-import { prefetchHomeImagesFromBlocks } from '../utils/prefetchHomeImages';
 import CmsRemoteImage from '../components/common/CmsRemoteImage';
 import { Theme } from '../constants/Theme';
 
 const MAX_SECTIONS = 20;
 
-function formatAddress(addr: { line1?: string; line2?: string; city?: string; state?: string; pincode?: string } | null | undefined): string {
-  if (!addr) return '';
-  const parts = [addr.line1, addr.line2, addr.city, addr.state, addr.pincode].filter(Boolean);
-  return parts.length > 0 ? parts.join(', ') : '';
-}
-
 export default function HomeScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
-  const { appConfig, setAppConfig } = useAppConfig();
+  const { appConfig } = useAppConfig();
   const { getTotalItems } = useCart();
   const cartItemCount = getTotalItems();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -52,45 +46,80 @@ export default function HomeScreen() {
       translateY: new Animated.Value(30),
     }))
   ).current;
-  const [bootstrapData, setBootstrapData] = useState<{ defaultAddress?: unknown } | null>(null);
-  const [homeLoading, setHomeLoading] = useState(false);
-  const [homeError, setHomeError] = useState<string | null>(null);
-  const [defaultAddress, setDefaultAddress] = useState<{ label?: string; line1: string; line2?: string; city: string; state?: string; pincode?: string } | null>(null);
+  const {
+    bootstrapData,
+    cmsBlocks,
+    homeConfig,
+    homeCoupons,
+    homeLoading,
+    homeError,
+    ensureCatalogLoaded,
+    reloadCatalog,
+  } = useCatalogCache();
+  const [defaultAddress, setDefaultAddress] = useState<Address | null>(null);
+  const [addressSynced, setAddressSynced] = useState(false);
+
+  const syncDeliveryAddressFromServer = useCallback(async () => {
+    try {
+      const res = await addressService.getAll();
+      if (!res?.success || !Array.isArray(res.data) || res.data.length === 0) {
+        setDefaultAddress(null);
+        await setLocation(null);
+        return false;
+      }
+      const selected = pickDefaultAddress(res.data);
+      if (!selected) {
+        setDefaultAddress(null);
+        await setLocation(null);
+        return false;
+      }
+      setDefaultAddress(selected);
+      await setLocation(addressToLocationData(selected));
+      return true;
+    } catch {
+      // Transient errors: do not wipe; keep last synced defaultAddress if any.
+    } finally {
+      setAddressSynced(true);
+    }
+  }, [setLocation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void syncDeliveryAddressFromServer();
+    }, [syncDeliveryAddressFromServer]),
+  );
 
   useEffect(() => {
-    let mounted = true;
-    const loadDefaultAddress = async () => {
-      try {
-        const res = await addressService.getDefault();
-        if (mounted && res?.success && res.data) {
-          setDefaultAddress(res.data);
-        }
-      } catch {
-        // 401 or network: ignore
-      }
-    };
-    loadDefaultAddress();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    return subscribeAddressesChanged(() => {
+      void syncDeliveryAddressFromServer();
+    });
+  }, [syncDeliveryAddressFromServer]);
 
-  // Show location drawer once when Home is freshly mounted, but only
-  // for returning users. Skip if user just completed LocationPermission setup.
+  // Show location drawer once on first mount only when user has no saved addresses.
   useEffect(() => {
     if (!hasShownDrawerRef.current) {
       hasShownDrawerRef.current = true;
-      if (navigationFlags.skipLocationDrawer) {
-        navigationFlags.skipLocationDrawer = false;
+      const skipDrawer = navigationFlags.skipLocationDrawer;
+      navigationFlags.skipLocationDrawer = false;
+      if (skipDrawer) {
         return;
       }
-      const timer = setTimeout(() => setShowLocationDrawer(true), 600);
-      return () => clearTimeout(timer);
+      void (async () => {
+        const hasAddresses = await syncDeliveryAddressFromServer();
+        if (!hasAddresses) {
+          setTimeout(() => setShowLocationDrawer(true), 600);
+        }
+      })();
     }
-  }, []);
+  }, [syncDeliveryAddressFromServer]);
 
-  const formattedAddress =
-    contextLocation?.address ?? formatAddress(defaultAddress ?? (bootstrapData?.defaultAddress as { line1?: string; line2?: string; city?: string; state?: string; pincode?: string } | undefined) ?? null);
+  const hasSavedDeliveryAddress = Boolean(defaultAddress?.line1?.trim());
+  const formattedAddress = hasSavedDeliveryAddress
+    ? formatAddressLines(defaultAddress)
+    : 'Add location';
+  const deliveryDestinationLabel = hasSavedDeliveryAddress
+    ? defaultAddress?.label || defaultAddress?.city || 'Home'
+    : contextLocation?.city || contextLocation?.area || 'your area';
 
   // Animate sections when screen is focused
   const hasAnimatedOnceRef = useRef(false);
@@ -143,18 +172,14 @@ export default function HomeScreen() {
     setShowLocationDrawer(true);
   };
 
-  const handleAddressSelect = useCallback((address: Address) => {
-    setDefaultAddress(address);
-    setLocation({
-      latitude: 0,
-      longitude: 0,
-      address: formatAddress(address),
-      area: address.city || '',
-      city: address.city || '',
-      granted: true,
-    });
-    setShowLocationDrawer(false);
-  }, [setLocation]);
+  const handleAddressSelect = useCallback(
+    (address: Address) => {
+      setDefaultAddress(address);
+      void setLocation(addressToLocationData(address));
+      setShowLocationDrawer(false);
+    },
+    [setLocation],
+  );
 
   const handleAddNewAddress = useCallback(() => {
     setShowLocationDrawer(false);
@@ -169,8 +194,10 @@ export default function HomeScreen() {
     }
   };
 
-  // CMS-only: load home from bootstrap (no legacy fallback).
-  const [cmsBlocks, setCmsBlocks] = useState<any[] | null>(null);
+  useEffect(() => {
+    void ensureCatalogLoaded();
+  }, [ensureCatalogLoaded]);
+
   const homeImageLayoutHints = useMemo(() => {
     const blocks = cmsBlocks || [];
     return {
@@ -185,122 +212,6 @@ export default function HomeScreen() {
   }, [cmsBlocks]);
   const { apiBaseUrl, env } = getEnvConfigSafe();
   const isDevBackend = env === 'development' || /localhost|127\.0\.0\.1/i.test(apiBaseUrl);
-
-  const [homeConfig, setHomeConfig] = useState<{
-    searchPlaceholder?: string;
-    heroVideoUrl?: string;
-    categorySectionTitle?: string;
-    organicTagline?: string;
-    organicIconUrl?: string;
-    deliveryTypeLabel?: string;
-  } | null>(null);
-
-  const [homeCoupons, setHomeCoupons] = useState<Coupon[]>([]);
-
-  const fetchHomeCoupons = useCallback(async () => {
-    try {
-      const res = await couponService.listCoupons({});
-      if (res.success && res.data?.coupons) {
-        const filtered = res.data.coupons
-          .filter(c => c.showInSections?.includes('HOME_BANNER'))
-          .sort((a, b) => (a.priorityRank || 10) - (b.priorityRank || 10));
-        setHomeCoupons(filtered);
-      }
-    } catch (err) {
-      logger.warn('Failed to fetch home coupons', err);
-    }
-  }, []);
-
-  const loadHome = useCallback(async () => {
-    setHomeLoading(true);
-    setHomeError(null);
-    try {
-      // Isolate bootstrap call to make it non-blocking for other functionality
-      const bootstrapResp = await homeService.getBootstrap();
-      if (bootstrapResp?.success && bootstrapResp?.data) {
-        setBootstrapData(bootstrapResp.data);
-        setHomeConfig(bootstrapResp.data.homeConfig ?? null);
-        if ((bootstrapResp.data as { appConfig?: unknown }).appConfig) {
-          setAppConfig((bootstrapResp.data as { appConfig: unknown }).appConfig as import('../contexts/AppConfigContext').AppConfigData);
-        }
-        const homePage = bootstrapResp.data.pages?.home;
-        if (homePage?.blocks?.length) {
-            // Some deployments may still return legacy categoryGrid titles from HomeConfig.
-            // Always re-derive the categoryGrid title from the dashboard sectionDefinitions label.
-            const legacySectionDefinitions = bootstrapResp.data?.legacy?.config?.sectionDefinitions;
-            const sectionLabelByKey = new Map(
-              Array.isArray(legacySectionDefinitions)
-                ? legacySectionDefinitions
-                    .filter((d: any) => d?.key && d?.label)
-                    .map((d: any) => [String(d.key), String(d.label)])
-                : []
-            );
-
-            const correctedBlocks = (homePage.blocks || []).map((block: any) => {
-              if (block?.type !== 'categoryGrid') return block;
-              const id = String(block?.id ?? '');
-              const match = id.match(/^legacy-(.+)-\d+$/);
-              if (!match) return block;
-              const sectionKey = match[1];
-              const correctTitle = sectionLabelByKey.get(sectionKey);
-              if (!correctTitle) return block;
-              return {
-                ...block,
-                config: {
-                  ...(block.config || {}),
-                  title: correctTitle,
-                },
-              };
-            });
-
-            const legacy = bootstrapResp.data?.legacy as { bannerIdsByKey?: Record<string, string[]> } | undefined;
-            let withBannerCarousel = correctedBlocks;
-            try {
-              if (typeof processLegacyHomeBanners === 'function') {
-                withBannerCarousel = await processLegacyHomeBanners(correctedBlocks, legacy);
-              } else {
-                logger.warn('processLegacyHomeBanners is not a function', { type: typeof processLegacyHomeBanners });
-              }
-            } catch (e) {
-              logger.error('Error in processLegacyHomeBanners', e);
-            }
-            setCmsBlocks(withBannerCarousel);
-            prefetchHomeImagesFromBlocks(withBannerCarousel);
-        } else {
-          setCmsBlocks([]);
-          setHomeError('No home content configured.');
-        }
-      } else {
-        setHomeError('Failed to load home data');
-        // Keep previous blocks if we already had a successful load; otherwise empty → skeletons
-        setCmsBlocks((prev) => (Array.isArray(prev) && prev.length > 0 ? prev : []));
-      }
-    } catch (err) {
-      const msg = getApiErrorMessage(err, 'Failed to load home data');
-      logger.error('Home bootstrap failed', { message: msg });
-      // Subtle error message for bootstrap failure
-      if (String(msg).toLowerCase().includes('internal server error') || String(msg).toLowerCase().includes('500')) {
-        setHomeError('Server error while loading home. Some content may be missing.');
-      } else {
-        setHomeError(msg);
-      }
-      // Non-blocking: keep last good CMS blocks when possible; otherwise show skeletons (empty array)
-      setCmsBlocks((prev) => (Array.isArray(prev) && prev.length > 0 ? prev : []));
-    } finally {
-      setHomeLoading(false);
-    }
-  }, [setAppConfig]);
-
-  // Run bootstrap and coupons separately: fetchHomeCoupons must not share an effect with loadHome.
-  // When loadHome set bootstrapData, fetchHomeCoupons used to list bootstrapData in its deps, so its
-  // identity changed after every successful bootstrap → this effect re-ran → loadHome again → flicker loop.
-  useEffect(() => {
-    loadHome();
-  }, [loadHome]);
-
-  useEffect(() => {
-    fetchHomeCoupons();
-  }, [fetchHomeCoupons]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const scrollY = event.nativeEvent.contentOffset.y;
@@ -350,8 +261,8 @@ export default function HomeScreen() {
               }
             >
               <TopSection
-                deliveryType={`${homeConfig?.deliveryTypeLabel ?? 'Delivery'} in ${assignedStore ? '10-15 mins' : '10 mins'} to ${defaultAddress?.label || contextLocation?.area || 'Home'}`}
-                address={formattedAddress}
+                deliveryType={`${homeConfig?.deliveryTypeLabel ?? 'Delivery'} in ${assignedStore ? '10-15 mins' : '10 mins'} to ${deliveryDestinationLabel}`}
+                address={addressSynced ? formattedAddress : '…'}
                 searchPlaceholder={homeConfig?.searchPlaceholder ?? appConfig.search?.placeholder ?? 'Search for products'}
                 heroVideoUrl={homeConfig?.heroVideoUrl ?? undefined}
                 onLocationPress={handleLocationPress}
@@ -429,7 +340,7 @@ export default function HomeScreen() {
                     ? 'Unable to load all content.'
                     : homeError}
                 </Text>
-                <TouchableOpacity style={styles.retryBannerButton} onPress={() => loadHome()} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.retryBannerButton} onPress={() => void reloadCatalog()} activeOpacity={0.7}>
                   <Text style={styles.retryBannerButtonText}>Retry</Text>
                 </TouchableOpacity>
               </View>

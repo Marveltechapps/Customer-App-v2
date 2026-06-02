@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useRefreshAppConfigOnFocus } from '../hooks/useRefreshAppConfigOnFocus';
 import {
   View,
   Text,
@@ -40,6 +41,8 @@ const CustomerSupport: React.FC = () => {
         .map((c) => c.label)
     : FALLBACK_HELP_ITEMS);
   const [loading, setLoading] = useState(false);
+
+  useRefreshAppConfigOnFocus();
 
   const handleHelpItemPress = (item: string) => {
     // Contact Support opens ticket form (match label from config or fallback)

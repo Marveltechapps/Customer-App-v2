@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -23,7 +24,6 @@ import { useAppConfig } from '../contexts/AppConfigContext';
 import { getEnvConfigSafe } from '../config/env';
 import { tokenManager } from '../services/api/tokenManager';
 
-const PRODUCT_IMAGE_FALLBACK = require('../assets/images/product-image-1.png');
 
 const formatDate = (dateStr: string): string => {
   try {
@@ -54,51 +54,48 @@ const OrderCanceledDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchOrderDetails = async () => {
-      if (!orderId) { setLoading(false); return; }
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await getOrderById(orderId);
-        const o = (response as any)?.data ?? response;
-        if (o) {
-          setOrder({ ...o, id: o.id ?? o._id ?? orderId });
-        } else {
-          setError('Order not found');
-        }
-      } catch (err) {
-        logger.error('Error fetching order details', err);
-        setError('Failed to load order details');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchOrderDetails();
-  }, [orderId]);
-
   const [callLogs, setCallLogs] = useState<Array<{ id: string; direction: string; duration: number; status: string; callerType: string; createdAt: string }>>([]);
 
-  useEffect(() => {
-    if (!orderId) return;
-    const fetchCallLogs = async () => {
-      try {
-        const baseUrl = getEnvConfigSafe().apiBaseUrl.replace(/\/customer\/?$/, '');
-        const token = await tokenManager.getAccessToken();
-        const res = await fetch(`${baseUrl}/shared/call-logs/by-order/${orderId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const json = await res.json();
-          setCallLogs(json.data ?? json.callLogs ?? []);
-        }
-      } catch (err) {
-        logger.error('Failed to fetch call logs', err);
+  const loadOrderScreenData = useCallback(async () => {
+    if (!orderId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await getOrderById(orderId);
+      const o = (response as any)?.data ?? response;
+      if (o) {
+        setOrder({ ...o, id: o.id ?? o._id ?? orderId });
+      } else {
+        setError('Order not found');
       }
-    };
-    fetchCallLogs();
+    } catch (err) {
+      logger.error('Error fetching order details', err);
+      setError('Failed to load order details');
+    } finally {
+      setLoading(false);
+    }
+
+    try {
+      const baseUrl = getEnvConfigSafe().apiBaseUrl.replace(/\/customer\/?$/, '');
+      const token = await tokenManager.getAccessToken();
+      const res = await fetch(`${baseUrl}/shared/call-logs/by-order/${orderId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setCallLogs(json.data ?? json.callLogs ?? []);
+      }
+    } catch (err) {
+      logger.error('Failed to fetch call logs', err);
+    }
   }, [orderId]);
+
+  useRefreshOnFocus(() => {
+    void loadOrderScreenData();
+  }, [loadOrderScreenData]);
 
   const handleOrderAgain = () => {
     logger.info('Order again pressed');
@@ -179,11 +176,15 @@ const OrderCanceledDetails: React.FC = () => {
           {order.items.map((product, index) => (
             <View key={product.id || index} style={styles.productItem}>
               <View style={styles.productImageWrapper}>
-                <Image
-                  source={product.image ? { uri: product.image } : PRODUCT_IMAGE_FALLBACK}
-                  style={styles.productImage}
-                  resizeMode="cover"
-                />
+                {product.image ? (
+                  <Image
+                    source={{ uri: product.image }}
+                    style={styles.productImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.productImage} />
+                )}
               </View>
               <View style={styles.productInfo}>
                 <Text style={styles.productName}>{product.productName}</Text>

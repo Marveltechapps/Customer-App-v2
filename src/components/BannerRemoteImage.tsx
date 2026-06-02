@@ -1,7 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { type StyleProp, type ViewStyle } from 'react-native';
 import { getProductImageUrl } from '../utils/productImage';
-import { getPlaceholderUrlWide } from '../config/placeholder';
 import CmsRemoteImage, { type CmsImagePriority } from './common/CmsRemoteImage';
 
 type Props = {
@@ -33,7 +32,6 @@ export default function BannerRemoteImage({
   priority = 'normal',
   recyclingKey,
 }: Props) {
-  const [failed, setFailed] = useState(false);
   const primaryUri = useMemo(() => {
     const raw =
       (typeof imageUrl === 'string' && imageUrl.trim() ? imageUrl.trim() : undefined) ??
@@ -44,19 +42,17 @@ export default function BannerRemoteImage({
       id: id != null ? String(id) : undefined,
     });
   }, [imageUrl, uri, title, id]);
-  const sourceUri = failed ? getPlaceholderUrlWide() : primaryUri;
   const rKey =
-    recyclingKey ?? (id != null ? `banner-${String(id)}` : `banner-${sourceUri.slice(0, 48)}`);
+    recyclingKey ?? (id != null ? `banner-${String(id)}` : `banner-${primaryUri.slice(0, 48)}`);
 
   return (
     <CmsRemoteImage
-      uri={sourceUri}
+      uri={primaryUri}
       style={[{ backgroundColor: '#EDEDED' }, style]}
       contentFit={contentFit}
       transition={transition}
       priority={priority}
       recyclingKey={rKey}
-      onError={() => setFailed(true)}
     />
   );
 }

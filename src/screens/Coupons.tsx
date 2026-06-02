@@ -14,7 +14,8 @@
  * @format
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -68,8 +69,8 @@ const Coupons: React.FC = () => {
     }
   }, [userKey, contextLocation?.area]);
 
-  useEffect(() => {
-    fetchCouponsList();
+  useRefreshOnFocus(() => {
+    void fetchCouponsList();
   }, [fetchCouponsList]);
 
   const handleApplyCoupon = (codeOverride?: string) => {

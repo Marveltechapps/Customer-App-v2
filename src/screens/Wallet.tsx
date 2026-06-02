@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -43,8 +44,7 @@ const Wallet: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchWalletData = async () => {
+  const fetchWalletData = useCallback(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -71,10 +71,11 @@ const Wallet: React.FC = () => {
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchWalletData();
   }, []);
+
+  useRefreshOnFocus(() => {
+    void fetchWalletData();
+  }, [fetchWalletData]);
 
   const renderTransaction = ({ item }: { item: Transaction }) => {
     const isCredit = item.type === 'credit';

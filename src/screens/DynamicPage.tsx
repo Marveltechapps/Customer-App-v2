@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import { View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
@@ -20,28 +21,28 @@ export default function DynamicPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
+  const loadPage = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
       const resp = await api.get(endpoints.page(slug));
-      if (!mounted) return;
       if (resp?.success && resp?.data?.blocks) {
         setBlocks(resp.data.blocks);
       } else {
+        setBlocks(null);
         setError('Page not found');
       }
-    };
-    setLoading(true);
-    setError(null);
-    load()
-      .catch((err) => {
-        if (mounted) setError(getApiErrorMessage(err, 'Failed to load page'));
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-    return () => { mounted = false; };
+    } catch (err) {
+      setBlocks(null);
+      setError(getApiErrorMessage(err, 'Failed to load page'));
+    } finally {
+      setLoading(false);
+    }
   }, [slug]);
+
+  useRefreshOnFocus(() => {
+    void loadPage();
+  }, [loadPage]);
 
   if (loading) {
     return (

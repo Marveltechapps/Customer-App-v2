@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import type { RootStackNavigationProp, RootStackRouteProp } from '../types/navigation';
 import BackIcon from '../components/icons/BackIcon';
 import SearchIcon from '../components/icons/SearchIcon';
@@ -183,7 +184,7 @@ export default function ProductDetailScreen({
 
   // Ref to track variants being added to prevent flicker
 
-  useEffect(() => {
+  useRefreshOnFocus(() => {
     if (!productId) {
       setProductError('No product selected');
       setLoading(false);
@@ -303,10 +304,10 @@ export default function ProductDetailScreen({
       }
     };
 
-    loadProductDetail();
+    void loadProductDetail();
   }, [productId, fetchProductDetail]);
 
-  useEffect(() => {
+  useRefreshOnFocus(() => {
     const loadSimilarProducts = async () => {
       if (fetchSimilarProducts) {
         try {
@@ -320,7 +321,7 @@ export default function ProductDetailScreen({
       }
     };
 
-    loadSimilarProducts();
+    void loadSimilarProducts();
   }, [productId, fetchSimilarProducts]);
 
   useEffect(() => {

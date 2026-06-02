@@ -9,7 +9,8 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import type { RootStackNavigationProp } from '../types/navigation';
 import Header from '../components/layout/Header';
 import PaymentCard from '../components/PaymentCard';
@@ -21,26 +22,23 @@ const PaymentManagement: React.FC = () => {
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      let mounted = true;
-      const fetchCards = async () => {
-        setLoading(true);
-        try {
-          const res = await paymentService.getSavedMethods();
-          if (mounted && res.success && res.data) {
-            setSavedCards(res.data.filter((m) => m.type === 'card'));
-          }
-        } catch (error) {
-          logger.error('Error fetching payment methods', error);
-        } finally {
-          if (mounted) setLoading(false);
-        }
-      };
-      fetchCards();
-      return () => { mounted = false; };
-    }, [])
-  );
+  const fetchCards = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await paymentService.getSavedMethods();
+      if (res.success && res.data) {
+        setSavedCards(res.data.filter((m) => m.type === 'card'));
+      }
+    } catch (error) {
+      logger.error('Error fetching payment methods', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useRefreshOnFocus(() => {
+    void fetchCards();
+  }, [fetchCards]);
 
   const handleDeleteCard = (card: SavedCard) => {
     Alert.alert('Remove Card', `Remove card ending in ${card.last4}?`, [

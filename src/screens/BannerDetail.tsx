@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, StatusBar, Platform, ScrollView, TouchableOpacity, Image, ImageSourcePropType, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import type { RootStackNavigationProp, RootStackRouteProp } from '../types/navigation';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import BackIcon from '../components/icons/BackIcon';
@@ -109,7 +110,7 @@ export default function BannerDetailScreen({
   const [productSelectedVariants, setProductSelectedVariants] = useState<Record<string, string>>({});
   const { updateQuantity, removeFromCart, cartItems, getLineQuantity } = useCart();
 
-  useEffect(() => {
+  useRefreshOnFocus(() => {
     const loadBannerDetail = async () => {
       if (params.bannerId) {
         setLoading(true);
@@ -161,7 +162,7 @@ export default function BannerDetailScreen({
         setBannerData({ ...EMPTY_BANNER_DETAIL, title: String(params.title) });
       }
     };
-    loadBannerDetail();
+    void loadBannerDetail();
   }, [params.bannerId, params.contentItemId, params.title]);
 
   const handleBack = () => {

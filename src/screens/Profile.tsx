@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -32,26 +33,26 @@ const Profile: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  useEffect(() => {
-    const fetchProfileData = async () => {
-      setLoading(true);
-      try {
-        const res = await userService.getProfile();
-        const data = (res as any)?.data ?? res;
-        if (data) {
-          setName(data.name ?? data.fullName ?? '');
-          setMobileNumber(data.mobileNumber ?? data.phone ?? data.mobile ?? '');
-          setEmailAddress(data.emailAddress ?? data.email ?? '');
-        }
-      } catch (error) {
-        logger.error('Error fetching profile data', error);
-      } finally {
-        setLoading(false);
+  const fetchProfileData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await userService.getProfile();
+      const data = (res as any)?.data ?? res;
+      if (data) {
+        setName(data.name ?? data.fullName ?? '');
+        setMobileNumber(data.mobileNumber ?? data.phone ?? data.mobile ?? '');
+        setEmailAddress(data.emailAddress ?? data.email ?? '');
       }
-    };
-
-    fetchProfileData();
+    } catch (error) {
+      logger.error('Error fetching profile data', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useRefreshOnFocus(() => {
+    void fetchProfileData();
+  }, [fetchProfileData]);
 
   const handleUpdate = async () => {
     setLoading(true);

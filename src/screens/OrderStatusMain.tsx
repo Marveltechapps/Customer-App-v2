@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -156,9 +157,13 @@ const OrderStatusMain: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Initial fetch and WebSocket for real-time updates (no REST polling)
-  useEffect(() => {
-    fetchOrder(true);
+  const isFirstOrderFocus = useRef(true);
+
+  useRefreshOnFocus(() => {
+    void fetchOrder(isFirstOrderFocus.current);
+    if (isFirstOrderFocus.current) {
+      isFirstOrderFocus.current = false;
+    }
   }, [fetchOrder]);
 
   // Connect WebSocket when order exists; handle status_update and rider_location

@@ -61,6 +61,8 @@ interface CartContextType {
   getTotalPrice: () => number;
   getTotalItems: () => number;
   clearCart: () => Promise<void>;
+  /** After a failed/cancelled checkout, allow server cart lines to load again. */
+  releaseEmptyCartLock: () => void;
   refreshCart: () => Promise<void>;
   refreshCartWithPricingContext: (context: cartService.CartPricingContext) => Promise<void>;
   /** Flush debounced qty updates then reload cart from server (use before checkout/payment). */
@@ -99,6 +101,7 @@ const FALLBACK_CART_CONTEXT: CartContextType = {
   getTotalPrice: () => 0,
   getTotalItems: () => 0,
   clearCart: async () => {},
+  releaseEmptyCartLock: () => {},
   refreshCart: async () => {},
   refreshCartWithPricingContext: async () => {},
   flushAndRefreshCart: async () => {},
@@ -182,6 +185,10 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
    * fetch response is stale — must be discarded.
    */
   const cartGeneration = useRef(0);
+  /** After order placement, block stale server cart lines from refetch until user adds again. */
+  const cartMustStayEmpty = useRef(false);
+  /** Timestamp of last successful checkout cart clear — used to reject orphan server lines. */
+  const checkoutCompletedAt = useRef<number | null>(null);
   /**
    * Recently removed line keys → expiry timestamp. Used to keep a removal
    * "sticky" so a stale or overlapping server cart can't bring the line back.
@@ -215,6 +222,60 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     [pruneTombstones],
   );
 
+  const cartItemsInternalRef = useRef<CartItem[]>([]);
+  useEffect(() => {
+    cartItemsInternalRef.current = cartItemsInternal;
+  }, [cartItemsInternal]);
+
+  const countActiveCartLines = useCallback((items: CartItem[]): number => {
+    return items.filter((i) => i.quantity > 0).length;
+  }, []);
+
+  const activeLineKeys = useCallback((items: CartItem[]): Set<string> => {
+    const keys = new Set<string>();
+    for (const item of items) {
+      if (item.quantity > 0) {
+        keys.add(cartLineKey(item.productId, item.variantId));
+      }
+    }
+    return keys;
+  }, []);
+
+  /** Server holds product lines that are not part of the current local cart session. */
+  const serverCartHasForeignLines = useCallback(
+    (cart: cartService.Cart, localItems: CartItem[]): boolean => {
+      const localKeys = activeLineKeys(localItems);
+      const serverItems = mapServerCartToItems(cart).filter((i) => i.quantity > 0);
+      if (localKeys.size === 0 && serverItems.length > 0) {
+        return cartMustStayEmpty.current || checkoutCompletedAt.current != null;
+      }
+      if (serverItems.length > localKeys.size) return true;
+      return serverItems.some(
+        (line) => !localKeys.has(cartLineKey(line.productId, line.variantId)),
+      );
+    },
+    [activeLineKeys],
+  );
+
+  /** @deprecated use serverCartHasForeignLines */
+  const serverCartHasStaleBleed = useCallback(
+    (cart: cartService.Cart, localItems: CartItem[]): boolean => {
+      return serverCartHasForeignLines(cart, localItems);
+    },
+    [serverCartHasForeignLines],
+  );
+
+  const purgeStaleServerCartLines = useCallback(async (): Promise<void> => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const res = await cartService.clearCart();
+        if (res.success) return;
+      } catch (err) {
+        if (attempt === 2) logger.warn('Failed to purge stale server cart lines', err);
+      }
+    }
+  }, []);
+
   const applyServerPricing = useCallback((cart: cartService.Cart) => {
     setServerPricing({
       itemTotal: Number(cart.itemTotal || 0),
@@ -226,8 +287,59 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     });
   }, []);
 
+  const serverCartLineCount = useCallback((cart: cartService.Cart): number => {
+    const items = cart?.items;
+    if (Array.isArray(items)) {
+      return items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+    }
+    return mapServerCartToItems(cart).reduce((sum, it) => sum + it.quantity, 0);
+  }, []);
+
+  const applyEmptyServerCart = useCallback(() => {
+    setCartItemsInternal([]);
+    setServerPricing({
+      itemTotal: 0,
+      discount: 0,
+      deliveryFee: 0,
+      handlingCharge: 0,
+      tax: 0,
+      total: 0,
+    });
+  }, []);
+
+  /** If cart was cleared for a completed order, do not resurrect lines from a stale GET. */
+  const reconcileCartAfterOrderClear = useCallback(
+    async (cart: cartService.Cart): Promise<cartService.Cart> => {
+      if (!cartMustStayEmpty.current) return cart;
+      if (serverCartLineCount(cart) === 0) return cart;
+      logger.warn('Server cart still has items after order clear — re-clearing', {
+        lineCount: serverCartLineCount(cart),
+      });
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const cleared = await cartService.clearCart();
+          if (cleared.success) break;
+        } catch (err) {
+          if (attempt === 2) logger.warn('Re-clear cart after order failed', err);
+        }
+      }
+      return {
+        ...cart,
+        items: [],
+        itemTotal: 0,
+        discount: 0,
+        deliveryFee: 0,
+        handlingCharge: 0,
+        tax: 0,
+        total: 0,
+      };
+    },
+    [serverCartLineCount],
+  );
+
   const applyServerCart = useCallback(
     (cart: cartService.Cart) => {
+      if (cartMustStayEmpty.current) return;
       setCartItemsInternal(dropRecentlyRemoved(mapServerCartToItems(cart)));
       applyServerPricing(cart);
     },
@@ -258,9 +370,16 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
    */
   const applyServerCartWithPendingMutations = useCallback(
     (cart: cartService.Cart) => {
+      if (cartMustStayEmpty.current) return;
       const serverItems = dropRecentlyRemoved(mapServerCartToItems(cart));
       const mutationInFlight = hasPendingOptimisticEdits();
       setCartItemsInternal((prev) => {
+        const localActive = prev.filter((line) => {
+          const qty = effectiveLocalLineQuantity(line, line.productId, line.variantId);
+          return qty > 0;
+        });
+        const hasLocalSession = localActive.length > 0 || mutationInFlight;
+
         const merged = serverItems
           .map((serverLine) => {
             const local = findCartLine(prev, serverLine.productId, serverLine.variantId);
@@ -269,9 +388,15 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
               serverLine.productId,
               serverLine.variantId,
             );
-            if (!local && localQty <= 0) return serverLine;
+            if (!local) {
+              // Never import server-only lines mid-session — those are usually a previous order.
+              if (hasLocalSession) return null;
+              if (localQty <= 0) return serverLine;
+              return null;
+            }
             if (localQty === 0) return null;
             if (
+              checkoutCompletedAt.current != null ||
               localQty > serverLine.quantity ||
               (mutationInFlight && localQty !== serverLine.quantity)
             ) {
@@ -301,11 +426,70 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     [applyServerPricing, effectiveLocalLineQuantity, hasPendingOptimisticEdits, dropRecentlyRemoved],
   );
 
+  const resyncLocalLinesToServer = useCallback(async (localActive: CartItem[]): Promise<void> => {
+    for (const line of localActive) {
+      try {
+        await cartService.addToCart({
+          productId: line.productId,
+          variantId: line.variantId,
+          quantity: line.quantity,
+        });
+      } catch (err) {
+        logger.warn('Failed to resync cart line to server after purge', err);
+      }
+    }
+  }, []);
+
+  const applyCartResponseGuardingStaleLines = useCallback(
+    async (cart: cartService.Cart, opts?: { preferLocalIfHigher?: boolean }) => {
+      if (cartMustStayEmpty.current) {
+        const localActive = cartItemsInternalRef.current.filter((i) => i.quantity > 0);
+        if (localActive.length > 0) {
+          return;
+        }
+        applyEmptyServerCart();
+        return;
+      }
+      const localItems = cartItemsInternalRef.current;
+      if (serverCartHasForeignLines(cart, localItems)) {
+        logger.warn('Stale server cart lines from previous order — purging server cart', {
+          serverLines: countActiveCartLines(mapServerCartToItems(cart)),
+          localLines: countActiveCartLines(localItems),
+        });
+        await purgeStaleServerCartLines();
+        const localActive = localItems.filter((i) => i.quantity > 0);
+        if (localActive.length > 0) {
+          setCartItemsInternal(localActive);
+          await resyncLocalLinesToServer(localActive);
+        } else {
+          applyEmptyServerCart();
+        }
+        return;
+      }
+      checkoutCompletedAt.current = null;
+      if (opts?.preferLocalIfHigher) {
+        applyServerCartWithPendingMutations(cart);
+      } else {
+        applyServerCart(cart);
+      }
+    },
+    [
+      applyEmptyServerCart,
+      applyServerCart,
+      applyServerCartWithPendingMutations,
+      countActiveCartLines,
+      purgeStaleServerCartLines,
+      resyncLocalLinesToServer,
+      serverCartHasForeignLines,
+    ],
+  );
+
   const syncLatestCart = useCallback(async (): Promise<boolean> => {
+    if (cartMustStayEmpty.current) return true;
     try {
       const latest = await cartService.getCart();
       if (latest.success && latest.data) {
-        applyServerCartWithPendingMutations(latest.data);
+        await applyCartResponseGuardingStaleLines(latest.data, { preferLocalIfHigher: true });
         return true;
       }
       return false;
@@ -313,7 +497,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
       logger.warn('Failed to refresh latest cart after mutation', err);
       return false;
     }
-  }, [applyServerCartWithPendingMutations]);
+  }, [applyCartResponseGuardingStaleLines]);
 
   const beginMutation = useCallback(() => {
     inFlightMutations.current += 1;
@@ -342,20 +526,26 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     [endMutation],
   );
 
+  /** Drop debounced qty syncs and invalidate in-flight cart responses after checkout. */
+  const cancelAllPendingCartSync = useCallback(() => {
+    lineQtySyncTimers.current.forEach((timer) => clearTimeout(timer));
+    lineQtySyncTimers.current.clear();
+    pendingLineQty.current.clear();
+    inFlightMutations.current = 0;
+    cartGeneration.current += 1;
+  }, []);
+
   const applyMutationCartResponse = useCallback(
-    (
+    async (
       res: Awaited<ReturnType<typeof cartService.getCart>> | undefined,
       opts?: { preferLocalIfHigher?: boolean },
-    ): boolean => {
+    ): Promise<boolean> => {
+      if (cartMustStayEmpty.current) return false;
       if (!res?.success || !res.data) return false;
-      if (opts?.preferLocalIfHigher) {
-        applyServerCartWithPendingMutations(res.data);
-      } else {
-        applyServerCart(res.data);
-      }
+      await applyCartResponseGuardingStaleLines(res.data, opts);
       return true;
     },
-    [applyServerCart, applyServerCartWithPendingMutations],
+    [applyCartResponseGuardingStaleLines],
   );
 
   const flushPendingCartSync = useCallback(async () => {
@@ -389,7 +579,11 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   const fetchCart = useCallback(
     async (context?: cartService.CartPricingContext, opts?: { force?: boolean }) => {
       if (opts?.force) {
-        await flushPendingCartSync();
+        if (cartMustStayEmpty.current) {
+          cancelAllPendingCartSync();
+        } else {
+          await flushPendingCartSync();
+        }
       } else if (hasPendingOptimisticEdits()) {
         return;
       }
@@ -406,7 +600,8 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
           !hasPendingOptimisticEdits() &&
           cartGeneration.current === genAtStart
         ) {
-          applyServerCartWithPendingMutations(res.data);
+          const cart = await reconcileCartAfterOrderClear(res.data);
+          await applyCartResponseGuardingStaleLines(cart, { preferLocalIfHigher: true });
         }
       } catch (err) {
         logger.warn('Failed to fetch cart from server', err);
@@ -414,17 +609,28 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         setLoading(false);
       }
     },
-    [applyServerCartWithPendingMutations, flushPendingCartSync, hasPendingOptimisticEdits],
+    [
+      applyCartResponseGuardingStaleLines,
+      cancelAllPendingCartSync,
+      flushPendingCartSync,
+      hasPendingOptimisticEdits,
+      reconcileCartAfterOrderClear,
+    ],
   );
 
   const flushAndRefreshCart = useCallback(
     async (context?: cartService.CartPricingContext) => {
-      await flushPendingCartSync();
+      if (cartMustStayEmpty.current) {
+        cancelAllPendingCartSync();
+      } else {
+        await flushPendingCartSync();
+      }
       try {
         setLoading(true);
         const res = await cartService.getCart(context);
         if (res.success && res.data) {
-          applyServerCart(res.data);
+          const cart = await reconcileCartAfterOrderClear(res.data);
+          await applyCartResponseGuardingStaleLines(cart);
         }
       } catch (err) {
         logger.warn('Failed to flush and refresh cart', err);
@@ -432,13 +638,25 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         setLoading(false);
       }
     },
-    [applyServerCart, flushPendingCartSync],
+    [
+      applyCartResponseGuardingStaleLines,
+      cancelAllPendingCartSync,
+      flushPendingCartSync,
+      reconcileCartAfterOrderClear,
+    ],
   );
+
+  const releaseEmptyCartLock = useCallback(() => {
+    cartMustStayEmpty.current = false;
+    checkoutCompletedAt.current = null;
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchCart(undefined, { force: true });
     } else {
+      cartMustStayEmpty.current = false;
+      checkoutCompletedAt.current = null;
       recentlyRemoved.current.clear();
       setCartItemsInternal([]);
       setServerPricing({ itemTotal: 0, discount: 0, deliveryFee: 0, handlingCharge: 0, tax: 0, total: 0 });
@@ -470,7 +688,6 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
       const normalizedImage = normalizeCartItemImage(item);
       const payload = resolveCartAddPayload(item.productId, item.variantId);
       cancelLineQtySync(payload.productId, payload.variantId);
-      // Re-adding a line lifts any pending removal tombstone so it can show again.
       clearRemoved(cartLineKey(payload.productId, payload.variantId));
       beginMutation();
 
@@ -497,46 +714,75 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         ];
       });
 
-      cartService
-        .addToCart({
-          productId: payload.productId,
-          variantId: payload.variantId,
-          quantity: 1,
-        })
-        .then(async (res) => {
-          try {
-            if (!applyMutationCartResponse(res, { preferLocalIfHigher: true })) {
-              await syncLatestCart();
-            }
-          } finally {
-            endMutation();
+      void (async () => {
+        const startingNewOrderSession = cartMustStayEmpty.current;
+        try {
+          if (startingNewOrderSession) {
+            cancelAllPendingCartSync();
+            cartMustStayEmpty.current = false;
+            await purgeStaleServerCartLines();
           }
-        })
-        .catch(async (err) => {
-          try {
-            logger.warn('addToCart API failed, syncing latest cart', err);
-            const synced = await syncLatestCart();
-            if (!synced) {
-              setCartItemsInternal((prev) => {
-                const line = findCartLine(prev, payload.productId, payload.variantId);
-                if (!line || line.quantity <= 1) {
-                  return prev.filter(
-                    (i) => !matchCartLine(i, payload.productId, payload.variantId),
-                  );
-                }
-                return prev.map((i) =>
-                  matchCartLine(i, payload.productId, payload.variantId)
-                    ? { ...i, quantity: i.quantity - 1 }
-                    : i,
-                );
+
+          const res = await cartService.addToCart({
+            productId: payload.productId,
+            variantId: payload.variantId,
+            quantity: 1,
+          });
+
+          if (startingNewOrderSession && res.success && res.data) {
+            if (serverCartHasForeignLines(res.data, cartItemsInternalRef.current)) {
+              await purgeStaleServerCartLines();
+              const retry = await cartService.addToCart({
+                productId: payload.productId,
+                variantId: payload.variantId,
+                quantity: 1,
               });
+              if (!(await applyMutationCartResponse(retry, { preferLocalIfHigher: true }))) {
+                await syncLatestCart();
+              }
+              checkoutCompletedAt.current = null;
+              return;
             }
-          } finally {
-            endMutation();
           }
-        });
+
+          if (!(await applyMutationCartResponse(res, { preferLocalIfHigher: true }))) {
+            await syncLatestCart();
+          }
+          checkoutCompletedAt.current = null;
+        } catch (err) {
+          logger.warn('addToCart API failed, syncing latest cart', err);
+          const synced = await syncLatestCart();
+          if (!synced) {
+            setCartItemsInternal((prev) => {
+              const line = findCartLine(prev, payload.productId, payload.variantId);
+              if (!line || line.quantity <= 1) {
+                return prev.filter(
+                  (i) => !matchCartLine(i, payload.productId, payload.variantId),
+                );
+              }
+              return prev.map((i) =>
+                matchCartLine(i, payload.productId, payload.variantId)
+                  ? { ...i, quantity: i.quantity - 1 }
+                  : i,
+              );
+            });
+          }
+        } finally {
+          endMutation();
+        }
+      })();
     },
-    [beginMutation, endMutation, applyMutationCartResponse, syncLatestCart, cancelLineQtySync, clearRemoved],
+    [
+      beginMutation,
+      endMutation,
+      applyMutationCartResponse,
+      syncLatestCart,
+      cancelLineQtySync,
+      cancelAllPendingCartSync,
+      clearRemoved,
+      purgeStaleServerCartLines,
+      serverCartHasForeignLines,
+    ],
   );
 
   const removeFromCart = useCallback(
@@ -582,7 +828,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
               await syncLatestCart();
               return;
             }
-            applyServerCart(res.data!);
+            await applyCartResponseGuardingStaleLines(res.data!, { preferLocalIfHigher: true });
           } finally {
             endMutation();
           }
@@ -599,7 +845,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     [
       beginMutation,
       endMutation,
-      applyServerCart,
+      applyCartResponseGuardingStaleLines,
       syncLatestCart,
       cancelLineQtySync,
       markRemoved,
@@ -724,20 +970,36 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   }, [cartItems]);
 
   const clearCartFn = useCallback(async (): Promise<void> => {
+    cancelAllPendingCartSync();
     beginMutation();
+    cartMustStayEmpty.current = true;
+    checkoutCompletedAt.current = Date.now();
 
     recentlyRemoved.current.clear();
-    setCartItemsInternal([]);
-    setServerPricing({ itemTotal: 0, discount: 0, deliveryFee: 0, handlingCharge: 0, tax: 0, total: 0 });
+    applyEmptyServerCart();
 
     try {
-      await cartService.clearCart();
-    } catch (err) {
-      logger.warn('clearCart API failed; local cart stays empty', err);
+      let clearedOnServer = false;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const res = await cartService.clearCart();
+          if (res.success) {
+            clearedOnServer = true;
+            break;
+          }
+        } catch (err) {
+          if (attempt === 2) {
+            logger.error('clearCart API failed after retries; cart locked empty locally', err);
+          }
+        }
+      }
+      if (!clearedOnServer) {
+        logger.warn('clearCart API did not confirm success; stale server lines will be rejected on refetch');
+      }
     } finally {
       endMutation();
     }
-  }, [beginMutation, endMutation]);
+  }, [applyEmptyServerCart, beginMutation, cancelAllPendingCartSync, endMutation]);
 
   const value: CartContextType = {
     cartItems,
@@ -750,6 +1012,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     getTotalPrice,
     getTotalItems,
     clearCart: clearCartFn,
+    releaseEmptyCartLock,
     refreshCart,
     refreshCartWithPricingContext,
     flushAndRefreshCart,

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -116,31 +117,22 @@ const HelpSubSection: React.FC = () => {
   // State to track which FAQ item is open (only one at a time)
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
-  // Placeholder for API call - Replace with actual API later
-  useEffect(() => {
-    // Simulate API call
-    const fetchFAQData = async () => {
-      setLoading(true);
-      try {
-        // TODO: Replace with actual API call
-        // const response = await fetch(`/api/help/${sectionName}`);
-        // const data = await response.json();
-        // setFaqItems(data.faqItems);
-
-        // Using dummy data for now
-        const data = FAQ_DATA[sectionName] || [];
-        setFaqItems(data);
-      } catch (error) {
-        logger.error('Error fetching FAQ data', error);
-        // Fallback to dummy data
-        setFaqItems(FAQ_DATA[sectionName] || []);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFAQData();
+  const fetchFAQData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = FAQ_DATA[sectionName] || [];
+      setFaqItems(data);
+    } catch (error) {
+      logger.error('Error fetching FAQ data', error);
+      setFaqItems(FAQ_DATA[sectionName] || []);
+    } finally {
+      setLoading(false);
+    }
   }, [sectionName]);
+
+  useRefreshOnFocus(() => {
+    void fetchFAQData();
+  }, [fetchFAQData]);
 
 
   const handleFAQPress = (index: number) => {

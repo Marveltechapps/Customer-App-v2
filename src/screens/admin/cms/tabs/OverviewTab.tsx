@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { getCmsOverview, type AdminCmsOverview } from '@/services/adminCms/adminCmsService';
 
@@ -8,20 +9,19 @@ export default function OverviewTab({ onNavigate }: { onNavigate: (tab: TabId) =
   const [data, setData] = useState<AdminCmsOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await getCmsOverview();
-        if (mounted) setData(res);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
+  const loadOverview = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await getCmsOverview();
+      setData(res);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useRefreshOnFocus(() => {
+    void loadOverview();
+  }, [loadOverview]);
 
   if (loading) return <ActivityIndicator style={{ marginTop: 40 }} />;
   if (!data) {

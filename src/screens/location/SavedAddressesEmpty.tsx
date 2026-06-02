@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import type { LocationStackNavigationProp } from '../../types/navigation';
 import Header from '../../components/layout/Header';
 import LocationIcon from '../../assets/images/location-icon.svg';
@@ -19,26 +20,24 @@ const SavedAddressesEmpty: React.FC = () => {
   const navigation = useNavigation<LocationStackNavigationProp>();
   const [loading, setLoading] = useState(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      const fetchAddresses = async () => {
-        setLoading(true);
-        try {
-          const response = await addressService.getAll();
-          if (response.success && response.data && response.data.length > 0) {
-            navigation.replace('SavedAddressesList');
-            return;
-          }
-        } catch (error) {
-          logger.error('Error fetching addresses', error);
-        } finally {
-          setLoading(false);
+  useRefreshOnFocus(() => {
+    const fetchAddresses = async () => {
+      setLoading(true);
+      try {
+        const response = await addressService.getAll();
+        if (response.success && response.data && response.data.length > 0) {
+          navigation.replace('SavedAddressesList');
+          return;
         }
-      };
+      } catch (error) {
+        logger.error('Error fetching addresses', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      fetchAddresses();
-    }, [navigation])
-  );
+    void fetchAddresses();
+  }, [navigation]);
 
   const handleAddNewAddress = () => {
     navigation.navigate('LocationSearch');

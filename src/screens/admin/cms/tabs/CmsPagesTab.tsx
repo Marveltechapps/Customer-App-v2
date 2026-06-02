@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { createPage, deletePage, listPages, type CmsPage } from '@/services/adminCms/adminCmsService';
@@ -22,7 +23,7 @@ export default function CmsPagesTab({ onEditBlocks }: { onEditBlocks: (pageId: s
     }
   };
 
-  useEffect(() => {
+  useRefreshOnFocus(() => {
     void load();
   }, []);
 

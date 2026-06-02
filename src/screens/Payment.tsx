@@ -16,10 +16,13 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
+import { useRefreshAppConfigOnFocus } from '../hooks/useRefreshAppConfigOnFocus';
 import Header from '../components/layout/Header';
 import { useCart } from '@/contexts/CartContext';
 import { cancelOrder, createOrder } from '../services/orders/orderService';
 import { addressService } from '../services/address/addressService';
+import { subscribeAddressesChanged } from '../utils/addressRefresh';
 import { paymentService, type SavedCard } from '../services/payments/paymentService';
 import { api } from '../services/api/client';
 import { endpoints } from '../services/api/endpoints';
@@ -46,16 +49,34 @@ import {
 type PaymentMethodOption = 'wallet' | 'cash' | 'card' | 'upi';
 type PaymentUiState = 'idle' | 'creating_order' | 'opening_gateway' | 'verifying' | 'paid' | 'failed' | 'pending_verification' | 'unknown' | 'error';
 
+function resolveInitialPaymentMethod(
+  value: RootStackParamList['Payment']['initialPaymentMethod'],
+): PaymentMethodOption {
+  if (value === 'cash' || value === 'card' || value === 'upi' || value === 'wallet') {
+    return value;
+  }
+  return 'cash';
+}
+
+function worldlinePaymentModeForMethod(method: PaymentMethodOption): 'UPI' | 'all' | 'cards' {
+  if (method === 'upi') return 'UPI';
+  if (method === 'card') return 'all';
+  return 'cards';
+}
+
 const Payment: React.FC = () => {
   const navigation = useNavigation<RootStackNavigationProp>();
   const route = useRoute<RouteProp<RootStackParamList, 'Payment'>>();
+  const routeParams = route.params;
   const insets = useSafeAreaInsets();
   const { appConfig } = useAppConfig();
-  const { cartItems, clearCart, refreshCart } = useCart();
+  const { cartItems, clearCart, refreshCart, releaseEmptyCartLock } = useCart();
   const { location: contextLocation } = useLocation();
   const { user, userKey } = useUser();
 
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethodOption>('cash');
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethodOption>(() =>
+    resolveInitialPaymentMethod(routeParams?.initialPaymentMethod),
+  );
   const [paymentUiState, setPaymentUiState] = useState<PaymentUiState>('idle');
   const [paymentStatus, setPaymentStatus] = useState<WorldlinePaymentStatus | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
@@ -75,12 +96,14 @@ const Payment: React.FC = () => {
   const placeOrderScale = useRef(new Animated.Value(1)).current;
   const successOpacity = useRef(new Animated.Value(0)).current;
 
-  const routeParams = route.params;
   const totalBill = routeParams?.totalBill ?? 0;
   const itemCount = routeParams?.itemCount ?? cartItems.length;
   const deliveryTip = routeParams?.deliveryTip ?? 0;
   const appliedCoupon = routeParams?.appliedCoupon;
   const routeAddressId = routeParams?.addressId ?? null;
+  const autoStartGateway = routeParams?.autoStartGateway === true;
+  const autoStartGatewayRef = useRef(false);
+  const handlePlaceOrderRef = useRef<(() => Promise<void>) | null>(null);
 
   const useWallet = selectedMethod === 'wallet';
   const walletDeduction = useWallet ? Math.min(walletBalance, totalBill) : 0;
@@ -95,8 +118,12 @@ const Payment: React.FC = () => {
         description: walletLoading ? 'Loading wallet balance...' : `Available balance: ₹${walletBalance.toFixed(0)}`,
         order: 1,
       },
-      card: { label: 'Credit / Debit Card', description: 'Pay securely via Worldline', order: 2 },
-      upi: { label: 'UPI', description: 'Google Pay, PhonePe, Paytm', order: 3 },
+      card: {
+        label: 'Credit / Debit / Net Banking',
+        description: 'Opens secure Worldline payment screen',
+        order: 2,
+      },
+      upi: { label: 'UPI', description: 'Opens Worldline — GPay, PhonePe, Paytm', order: 3 },
     };
 
     const supported = new Set<PaymentMethodOption>(['cash', 'wallet', 'card', 'upi']);
@@ -180,37 +207,50 @@ const Payment: React.FC = () => {
   // ... (saved cards and wallet state kept same for now) ...
 
 
-  useEffect(() => {
-    if (!routeAddressId) {
-      const fetchAddress = async () => {
-        try {
-          const res = await addressService.getDefault();
-          if (res.success && res.data?._id) {
-            setAddressId(res.data._id);
-          }
-        } catch {
-          logger.warn('Failed to fetch default address');
-        }
-      };
-      fetchAddress();
+  const fetchDefaultAddressId = useCallback(async () => {
+    if (routeAddressId) {
+      setAddressId(routeAddressId);
+      return;
+    }
+    try {
+      const res = await addressService.getDefault();
+      if (res.success && res.data?._id) {
+        setAddressId(res.data._id);
+      }
+    } catch {
+      logger.warn('Failed to fetch default address');
     }
   }, [routeAddressId]);
 
   useEffect(() => {
-    const fetchWallet = async () => {
-      setWalletLoading(true);
-      try {
-        const res = await api.get<any>(endpoints.wallet.balance);
-        if (res.success && res.data) {
-          setWalletBalance(res.data.balance || 0);
-        }
-      } catch {
-        logger.warn('Failed to fetch wallet balance');
-      } finally {
-        setWalletLoading(false);
+    void fetchDefaultAddressId();
+  }, [fetchDefaultAddressId]);
+
+  useRefreshOnFocus(() => {
+    void fetchDefaultAddressId();
+  }, [fetchDefaultAddressId]);
+
+  useEffect(() => {
+    if (routeAddressId) {
+      return;
+    }
+    return subscribeAddressesChanged(() => {
+      void fetchDefaultAddressId();
+    });
+  }, [fetchDefaultAddressId, routeAddressId]);
+
+  const fetchWallet = useCallback(async () => {
+    setWalletLoading(true);
+    try {
+      const res = await api.get<any>(endpoints.wallet.balance);
+      if (res.success && res.data) {
+        setWalletBalance(res.data.balance || 0);
       }
-    };
-    fetchWallet();
+    } catch {
+      logger.warn('Failed to fetch wallet balance');
+    } finally {
+      setWalletLoading(false);
+    }
   }, []);
 
   const fetchSavedCards = useCallback(async () => {
@@ -230,9 +270,13 @@ const Payment: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchSavedCards();
-  }, [fetchSavedCards]);
+  useRefreshAppConfigOnFocus();
+
+  useRefreshOnFocus(() => {
+    void fetchWallet();
+    void fetchSavedCards();
+  }, [fetchWallet, fetchSavedCards]);
+
 
   const formatCardNumber = (text: string) => {
     const digits = text.replace(/\D/g, '').slice(0, 16);
@@ -358,28 +402,32 @@ const Payment: React.FC = () => {
       setActiveOrderId(orderId);
       await saveInFlightPayment(orderId, selectedMethod);
 
-      if (selectedMethod === 'card' || selectedMethod === 'upi') {
-        await refreshCart();
-      }
+      // Order lines are saved server-side; cart belongs to this order, not the next one.
+      await clearCart();
 
-      // 1. Cash or Full Wallet Pay (No Gateway)
-      if (selectedMethod === 'cash' || (selectedMethod === 'wallet' && amountToPay === 0)) {
+      // 1. Cash or Wallet (no Worldline gateway)
+      if (selectedMethod === 'cash' || selectedMethod === 'wallet') {
         await finalizeOrder(orderId);
         return;
       }
 
-      // 2. Online Payment (Card / UPI via Worldline Gateway)
+      // 2. Card / Net banking / UPI — Worldline Paynimo SDK screen
+      if (selectedMethod !== 'card' && selectedMethod !== 'upi') {
+        throw new Error('Unsupported payment method');
+      }
+
       setPaymentUiState('opening_gateway');
+      const paymentMode = worldlinePaymentModeForMethod(selectedMethod);
       logger.info('Creating Worldline session', {
         orderId,
-        paymentMode: selectedMethod === 'upi' ? 'UPI' : 'cards',
+        paymentMode,
       });
 
       const session = await createWorldlineSession({
         orderId,
         consumerEmailId: user?.email,
         consumerMobileNo: user?.phoneNumber,
-        paymentMode: selectedMethod === 'upi' ? 'UPI' : 'cards',
+        paymentMode,
       });
 
       logger.info('Opening Worldline gateway', {
@@ -443,6 +491,22 @@ const Payment: React.FC = () => {
       );
     }
   };
+
+  handlePlaceOrderRef.current = handlePlaceOrder;
+
+  useEffect(() => {
+    if (!autoStartGateway) return;
+    if (autoStartGatewayRef.current) return;
+    if (selectedMethod !== 'card' && selectedMethod !== 'upi') return;
+    if (!addressId && !routeAddressId) return;
+    if (paymentUiState !== 'idle') return;
+
+    autoStartGatewayRef.current = true;
+    const timer = setTimeout(() => {
+      void handlePlaceOrderRef.current?.();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [autoStartGateway, selectedMethod, addressId, routeAddressId, paymentUiState]);
 
   const finalizeOrder = async (orderId: string) => {
     try {
@@ -513,6 +577,7 @@ const Payment: React.FC = () => {
     } else if (status.uiState === 'FAILED' || status.uiState === 'RETRY_AVAILABLE') {
       clearInFlightPaymentFn();
       setPaymentUiState('failed');
+      releaseEmptyCartLock();
       void refreshCart().catch(() => {});
       const payCode = String(status.latestPayment?.statusCode || '').trim();
       let alertTitle = 'Payment Failed';
@@ -564,6 +629,7 @@ const Payment: React.FC = () => {
                 try {
                   setCancellingPayment(true);
                   await cancelOrder(orderId);
+                  releaseEmptyCartLock();
                   await refreshCart();
                   await clearInFlightPaymentFn();
                   setPaymentStatus(null);
@@ -648,142 +714,17 @@ const Payment: React.FC = () => {
     );
   }
 
-  const renderSavedCards = () => {
+  const renderCardWorldlineInfo = () => {
     if (selectedMethod !== 'card') return null;
 
     return (
       <View style={styles.expandedSection}>
-        {loadingCards ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#034703" />
-            <Text style={styles.loadingText}>Loading saved cards...</Text>
-          </View>
-        ) : (
-          <>
-            {savedCards.map((card) => (
-              <TouchableOpacity
-                key={card.id}
-                style={[
-                  styles.savedCardItem,
-                  selectedCardId === card.id && styles.savedCardItemSelected,
-                ]}
-                onPress={() => setSelectedCardId(card.id)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.savedCardLeft}>
-                  <View style={[styles.cardRadio, selectedCardId === card.id && styles.cardRadioSelected]}>
-                    {selectedCardId === card.id && <View style={styles.cardRadioInner} />}
-                  </View>
-                  <View style={styles.savedCardInfo}>
-                    <Text style={styles.savedCardBrand}>{card.brand || 'Card'}</Text>
-                    <Text style={styles.savedCardNumber}>
-                      **** **** **** {card.last4}
-                    </Text>
-                    {card.cardholderName ? (
-                      <Text style={styles.savedCardHolder}>{card.cardholderName}</Text>
-                    ) : null}
-                  </View>
-                </View>
-                <View style={styles.savedCardActions}>
-                  <TouchableOpacity
-                    style={styles.cardActionBtn}
-                    onPress={() => handleDeleteCard(card)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={styles.cardActionDelete}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            ))}
-
-            {!showAddCard ? (
-              <TouchableOpacity
-                style={styles.addCardButton}
-                onPress={() => setShowAddCard(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.addCardPlus}>+</Text>
-                <Text style={styles.addCardText}>Add New Card</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.addCardForm}>
-                <Text style={styles.addCardFormTitle}>Add New Card</Text>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Card Number</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="1234 5678 9012 3456"
-                    placeholderTextColor="rgba(107, 107, 107, 0.5)"
-                    value={cardForm.number}
-                    onChangeText={(t) => setCardForm((f) => ({ ...f, number: formatCardNumber(t) }))}
-                    keyboardType="number-pad"
-                    maxLength={19}
-                  />
-                </View>
-                <View style={styles.inputRow}>
-                  <View style={[styles.inputGroup, { flex: 1 }]}>
-                    <Text style={styles.inputLabel}>Expiry Date</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="MM/YY"
-                      placeholderTextColor="rgba(107, 107, 107, 0.5)"
-                      value={cardForm.expiry}
-                      onChangeText={(t) => setCardForm((f) => ({ ...f, expiry: formatExpiry(t) }))}
-                      keyboardType="number-pad"
-                      maxLength={5}
-                    />
-                  </View>
-                  <View style={[styles.inputGroup, { flex: 1 }]}>
-                    <Text style={styles.inputLabel}>CVV</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="123"
-                      placeholderTextColor="rgba(107, 107, 107, 0.5)"
-                      value={cardForm.cvv}
-                      onChangeText={(t) => setCardForm((f) => ({ ...f, cvv: t.replace(/\D/g, '').slice(0, 4) }))}
-                      keyboardType="number-pad"
-                      maxLength={4}
-                      secureTextEntry
-                    />
-                  </View>
-                </View>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Cardholder Name</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="John Doe"
-                    placeholderTextColor="rgba(107, 107, 107, 0.5)"
-                    value={cardForm.name}
-                    onChangeText={(t) => setCardForm((f) => ({ ...f, name: t }))}
-                    autoCapitalize="words"
-                  />
-                </View>
-                <View style={styles.formActions}>
-                  <TouchableOpacity
-                    style={styles.formCancelBtn}
-                    onPress={() => {
-                      setShowAddCard(false);
-                      setCardForm({ number: '', expiry: '', cvv: '', name: '' });
-                    }}
-                  >
-                    <Text style={styles.formCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.formSaveBtn, savingCard && styles.formSaveBtnDisabled]}
-                    onPress={handleAddCard}
-                    disabled={savingCard}
-                  >
-                    {savingCard ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Text style={styles.formSaveText}>Save Card</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-          </>
-        )}
+        <View style={styles.upiInfoBox}>
+          <Text style={styles.upiInfoText}>
+            Tap Place Order to open the secure Worldline screen. Pay with credit/debit card or internet
+            banking there — card details are not entered in this app.
+          </Text>
+        </View>
       </View>
     );
   };
@@ -977,7 +918,7 @@ const Payment: React.FC = () => {
                 </TouchableOpacity>
 
                 {method.id === 'wallet' && isSelected && renderWalletDetails()}
-                {method.id === 'card' && isSelected && renderSavedCards()}
+                {method.id === 'card' && isSelected && renderCardWorldlineInfo()}
                 {method.id === 'upi' && isSelected && renderUpiDetails()}
               </View>
             );
@@ -993,6 +934,8 @@ const Payment: React.FC = () => {
                 ? `₹${walletDeduction.toFixed(0)} from wallet, ₹${amountToPay.toFixed(0)} as cash on delivery.`
                 : selectedMethod === 'cash'
                 ? 'You will pay the delivery partner in cash when your order arrives.'
+                : selectedMethod === 'card' || selectedMethod === 'upi'
+                ? 'You will be redirected to the Worldline payment gateway to complete payment.'
                 : 'Your payment will be processed securely. Amount will be charged upon order confirmation.'}
             </Text>
           </View>
@@ -1007,7 +950,9 @@ const Payment: React.FC = () => {
             const buttonDisabled = isDisabled;
 
             let buttonLabel = `Place Order  •  ₹${totalBill.toFixed(0)}`;
-            if (useWallet && walletDeduction > 0) {
+            if (selectedMethod === 'card' || selectedMethod === 'upi') {
+              buttonLabel = `Pay via Worldline  •  ₹${totalBill.toFixed(0)}`;
+            } else if (useWallet && walletDeduction > 0) {
               buttonLabel += ` (₹${walletDeduction.toFixed(0)} wallet)`;
             }
 

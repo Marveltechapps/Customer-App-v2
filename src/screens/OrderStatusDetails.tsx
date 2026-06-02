@@ -17,7 +17,8 @@
  * @format
  */
 
-import React, { useState, useEffect, Component, type ReactNode, type ErrorInfo } from 'react';
+import React, { useState, useEffect, useCallback, Component, type ReactNode, type ErrorInfo } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -118,9 +119,7 @@ const OrderStatusDetails: React.FC = () => {
   const [driverCoordinates, setDriverCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
   const [wsRef, setWsRef] = useState<WebSocket | null>(null);
 
-  // Fetch order from API
-  useEffect(() => {
-    const fetchOrderDetails = async () => {
+  const fetchOrderDetails = useCallback(async () => {
       if (!orderId) return;
       setLoading(true);
       try {
@@ -189,10 +188,11 @@ const OrderStatusDetails: React.FC = () => {
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchOrderDetails();
   }, [orderId, status]);
+
+  useRefreshOnFocus(() => {
+    void fetchOrderDetails();
+  }, [fetchOrderDetails]);
 
   useEffect(() => {
     if (!userLocation) {

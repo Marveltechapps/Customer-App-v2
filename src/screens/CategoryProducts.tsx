@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useCatalogCache } from '../contexts/CatalogCacheContext';
 import type { RootStackNavigationProp, RootStackRouteProp } from '../types/navigation';
 import BackIcon from '../components/icons/BackIcon';
 import SearchIcon from '../components/icons/SearchIcon';
@@ -39,7 +40,9 @@ import { formatProductDiscountLabel, resolveProductOriginalPrice } from '../util
 interface SubCategory {
   id: string;
   name: string;
-  image: any;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  cardImageUrl?: string | null;
   slug?: string;
 }
 
@@ -80,6 +83,7 @@ export default function CategoryProducts({
   // Responsive dimensions - using responsive utilities
   const { width: screenWidth } = useDimensions();
   const { cartItems, getLineQuantity, updateQuantity, removeFromCart } = useCart();
+  const { fetchCategoryPayloadCached } = useCatalogCache();
 
   // Use params if provided, otherwise use props. Avoid placeholder id so API isn't called with invalid id.
   const finalCategoryName = (params.categoryName as string) || categoryName || 'Category';
@@ -100,24 +104,38 @@ export default function CategoryProducts({
   const initialLoadDone = useRef(false);
   /** Skips redundant refetch when the initial load already populated products for this category + subcategory. */
   const lastSubFetchKeyRef = useRef<string>('');
+
   // Track selected variant for each product (for synchronization)
   const [productSelectedVariants, setProductSelectedVariants] = useState<Record<string, string>>({});
 
   const mapApiProductToProduct = useCallback((p: CategoryPayloadProduct): Product => {
+    const rows = variantRowsFromApiProduct(p);
+    const firstVariantWithImage = rows.find(
+      (v) => v.imageUrl || v.thumbnailUrl || v.cardImageUrl || (v.images && v.images.length > 0),
+    );
+    const imageInput = {
+      ...p,
+      imageUrl: p.imageUrl ?? firstVariantWithImage?.imageUrl,
+      thumbnailUrl: p.thumbnailUrl ?? firstVariantWithImage?.thumbnailUrl,
+      cardImageUrl: p.cardImageUrl ?? firstVariantWithImage?.cardImageUrl,
+      images:
+        Array.isArray(p.images) && p.images.length > 0
+          ? p.images
+          : firstVariantWithImage?.images,
+    };
     logger.debug('Category payload raw product image URL', {
       productId: p.id,
       name: p.name,
-      thumbnailUrl: (p as any).thumbnailUrl,
-      cardImageUrl: (p as any).cardImageUrl,
-      imageUrl: (p as any).imageUrl,
-      firstImage: Array.isArray((p as any).images) ? (p as any).images[0] : undefined,
+      thumbnailUrl: imageInput.thumbnailUrl,
+      cardImageUrl: imageInput.cardImageUrl,
+      imageUrl: imageInput.imageUrl,
+      firstImage: Array.isArray(imageInput.images) ? imageInput.images[0] : undefined,
     });
-    const rows = variantRowsFromApiProduct(p);
     return {
       id: p.id,
       name: p.name,
-      image: getProductImageSource(p),
-      imageCatalog: productImageCatalogFromApi(p),
+      image: getProductImageSource(imageInput),
+      imageCatalog: productImageCatalogFromApi(imageInput),
       price: p.price,
       originalPrice: resolveProductOriginalPrice(p as any),
       discount: formatProductDiscountLabel(p as any),
@@ -154,7 +172,7 @@ export default function CategoryProducts({
   const loadSubcategoryProductsWithFallback = useCallback(
     async (subCategoryId: string) => {
       // Primary path: id-based API
-      const res = await categoryService.getCategoryPayload(finalCategoryId, subCategoryId);
+      const res = await fetchCategoryPayloadCached(finalCategoryId, subCategoryId);
       const primaryProducts = res?.data?.products ?? [];
       if (Array.isArray(primaryProducts) && primaryProducts.length > 0) {
         setApiProducts(primaryProducts);
@@ -181,7 +199,7 @@ export default function CategoryProducts({
         setProducts(baseCategoryProducts.map(mapApiProductToProduct));
       }
     },
-    [baseCategoryProducts, categorySlug, finalCategoryId, mapApiProductToProduct, mapSlugProductToProduct, subCategories]
+    [baseCategoryProducts, categorySlug, fetchCategoryPayloadCached, finalCategoryId, mapApiProductToProduct, mapSlugProductToProduct, subCategories]
   );
 
   // Category API: load category payload when finalCategoryId is set (and not using fetch props)
@@ -206,7 +224,7 @@ export default function CategoryProducts({
 
     (async () => {
       try {
-        const res = await categoryService.getCategoryPayload(finalCategoryId);
+        const res = await fetchCategoryPayloadCached(finalCategoryId);
         if (cancelled || !res?.success || !res.data) return;
         const { category: _c, subcategories: sc, banners: b, products: pr } = res.data;
         const safeSubCategories = Array.isArray(sc) ? sc : [];
@@ -221,13 +239,15 @@ export default function CategoryProducts({
             id: s.id,
             name: s.name,
             slug: (s as { slug?: string }).slug,
-            image: getProductImageSource({ imageUrl: s.imageUrl, name: s.name, id: s.id }),
+            imageUrl: s.imageUrl,
+            thumbnailUrl: s.thumbnailUrl,
+            cardImageUrl: s.cardImageUrl,
           }))
         );
         setBanners(
           safeBanners.map((x) => ({
             id: x.id,
-            image: getProductImageSource({ imageUrl: x.imageUrl, name: x.name, id: x.id }),
+            image: getProductImageSource({ imageUrl: x.imageUrl, name: x.title ?? undefined, id: x.id }),
             link: x.link ?? null,
             redirectType: x.redirectType ?? null,
             redirectValue: x.redirectValue ?? null,
@@ -242,7 +262,7 @@ export default function CategoryProducts({
           setSelectedSubCategoryId(firstSubCategoryId);
           const subKey = `${finalCategoryId}:${firstSubCategoryId}`;
           try {
-            const subRes = await categoryService.getCategoryPayload(finalCategoryId, firstSubCategoryId);
+            const subRes = await fetchCategoryPayloadCached(finalCategoryId, firstSubCategoryId);
             if (cancelled) return;
             const subProducts = Array.isArray(subRes?.data?.products) ? subRes.data.products : [];
             if (subProducts.length > 0) {
@@ -301,7 +321,7 @@ export default function CategoryProducts({
     return () => {
       cancelled = true;
     };
-  }, [finalCategoryId, fetchSubCategories, fetchBanners, fetchProducts, mapApiProductToProduct, mapSlugProductToProduct]);
+  }, [finalCategoryId, fetchCategoryPayloadCached, fetchSubCategories, fetchBanners, fetchProducts, mapApiProductToProduct, mapSlugProductToProduct]);
 
   // When user selects a subcategory, refetch products for that subcategory
   useEffect(() => {
@@ -635,7 +655,9 @@ export default function CategoryProducts({
                   key={subCategory.id}
                   id={subCategory.id}
                   name={subCategory.name}
-                  image={subCategory.image}
+                  imageUrl={subCategory.imageUrl}
+                  thumbnailUrl={subCategory.thumbnailUrl}
+                  cardImageUrl={subCategory.cardImageUrl}
                   isSelected={selectedSubCategoryId === subCategory.id}
                   onPress={handleSubCategoryPress}
                 />

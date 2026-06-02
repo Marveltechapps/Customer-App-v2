@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -107,26 +108,26 @@ const RefundDetailsScreen: React.FC = () => {
   const [refundDetails, setRefundDetails] = useState<RefundDetailsType | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const loadRefundDetails = useCallback(async () => {
     if (!refundId) {
       setRefundDetails(null);
       return;
     }
-    const loadRefundDetails = async () => {
-      setLoading(true);
-      try {
-        const data = await fetchRefundDetails(refundId);
-        setRefundDetails(data ?? null);
-      } catch (error) {
-        logger.error('Error fetching refund details', error);
-        setRefundDetails(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadRefundDetails();
+    setLoading(true);
+    try {
+      const data = await fetchRefundDetails(refundId);
+      setRefundDetails(data ?? null);
+    } catch (error) {
+      logger.error('Error fetching refund details', error);
+      setRefundDetails(null);
+    } finally {
+      setLoading(false);
+    }
   }, [refundId]);
+
+  useRefreshOnFocus(() => {
+    void loadRefundDetails();
+  }, [loadRefundDetails]);
 
   const getStatusButtonStyle = () => {
     if (!refundDetails) return { backgroundColor: '#034703', text: 'Completed' };

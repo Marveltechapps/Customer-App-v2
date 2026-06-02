@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,16 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect, CommonActions } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import type { LocationStackNavigationProp } from '../../types/navigation';
 import Header from '../../components/layout/Header';
 import LocationIcon from '../../assets/images/location-icon.svg';
 import { addressService, Address } from '../../services/address/addressService';
 import { useLocation } from '../../contexts/LocationContext';
 import { logger } from '@/utils/logger';
+import { notifyAddressesChanged, subscribeAddressesChanged } from '@/utils/addressRefresh';
+import { addressToLocationData, pickDefaultAddress } from '@/utils/addressLocationSync';
 
 const TAG_ICON: Record<string, string> = {
   Home: '🏠',
@@ -32,8 +35,10 @@ const SavedAddressesList: React.FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectingId, setSelectingId] = useState<string | null>(null);
 
-  const fetchAddresses = useCallback(async () => {
-    setLoading(true);
+  const fetchAddresses = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
     try {
       const response = await addressService.getAll();
       if (response.success && response.data) {
@@ -46,11 +51,15 @@ const SavedAddressesList: React.FC = () => {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchAddresses();
-    }, [fetchAddresses])
-  );
+  useRefreshOnFocus(() => {
+    void fetchAddresses();
+  }, [fetchAddresses]);
+
+  useEffect(() => {
+    return subscribeAddressesChanged(() => {
+      void fetchAddresses({ silent: true });
+    });
+  }, [fetchAddresses]);
 
   const goBackToParent = () => {
     const parent = navigation.getParent();
@@ -108,7 +117,21 @@ const SavedAddressesList: React.FC = () => {
               if (!res?.success) {
                 throw new Error(res?.message || 'Could not delete address');
               }
-              setAddresses((prev) => prev.filter((a) => a._id !== id));
+              const refreshed = await addressService.getAll();
+              const list =
+                refreshed?.success && Array.isArray(refreshed.data) ? refreshed.data : [];
+              setAddresses(list);
+              const fallback = pickDefaultAddress(list);
+              notifyAddressesChanged({
+                type: 'delete',
+                addressId: id,
+                nextAddress: fallback,
+              });
+              if (fallback) {
+                setLocation(addressToLocationData(fallback));
+              } else {
+                setLocation(null);
+              }
             } catch (error) {
               logger.error('Error deleting address', error);
               Alert.alert('Error', 'Could not delete address. Please try again.');
@@ -123,38 +146,18 @@ const SavedAddressesList: React.FC = () => {
 
   const handleSelectAddress = async (address: Address) => {
     if (address.isDefault) {
-      const parts = [address.line1, address.line2, address.landmark, address.city, address.state, address.pincode].filter(Boolean);
-      setLocation({
-        latitude: address.latitude || 0,
-        longitude: address.longitude || 0,
-        address: parts.join(', '),
-        area: address.city || '',
-        city: address.city || '',
-        granted: true,
-      });
+      setLocation(addressToLocationData(address));
       goBackToParent();
       return;
     }
     setSelectingId(address._id);
     try {
-      await addressService.setDefault(address._id);
-      setAddresses((prev) =>
-        prev.map((a) => ({
-          ...a,
-          isDefault: a._id === address._id,
-        })),
-      );
-
-      const parts = [address.line1, address.line2, address.landmark, address.city, address.state, address.pincode].filter(Boolean);
-      setLocation({
-        latitude: address.latitude || 0,
-        longitude: address.longitude || 0,
-        address: parts.join(', '),
-        area: address.city || '',
-        city: address.city || '',
-        granted: true,
-      });
-
+      const res = await addressService.setDefault(address._id);
+      const selected =
+        res?.success && res.data ? res.data : { ...address, isDefault: true };
+      await fetchAddresses({ silent: true });
+      setLocation(addressToLocationData(selected));
+      notifyAddressesChanged({ type: 'upsert', address: selected });
       goBackToParent();
     } catch (error) {
       logger.error('Error selecting address', error);

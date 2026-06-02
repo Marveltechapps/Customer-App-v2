@@ -19,16 +19,13 @@ import { useCart } from '@/contexts/CartContext';
 import { logger } from '@/utils/logger';
 import { variantRowsFromApiProduct, type ProductVariantRow } from '@/utils/productVariants';
 import {
-  buildProductImageMasterSheetRow,
+  collectProductImageUrlCandidates,
   getImageFitFromUrl,
   type ProductLikeImageInput,
 } from '@/utils/productImage';
 import { shouldUseLocalPlaceholder } from '@/config/placeholder';
 import { addOrIncrementCartLine } from '@/utils/cartActions';
-import {
-  buildCartItemPayload,
-  resolveProductCartLine,
-} from '@/utils/productCardCart';
+import { buildCartItemPayload, resolveProductCartLine } from '@/utils/productCardCart';
 
 /** Remote or placeholder sentinel URI for CmsRemoteImage (not for native Image URL loading). */
 function remoteDisplayUri(src: ImageSourcePropType): string | null {
@@ -176,7 +173,17 @@ export default function ProductCard({
     }
   }, [lineProductId, lineVariantId, cartQuantity, updateQuantity]);
 
-  const productImageUri = remoteDisplayUri(product.image);
+  const productImageCandidates = useMemo(
+    () =>
+      collectProductImageUrlCandidates({
+        id: product.id,
+        name: product.name,
+        ...product.imageCatalog,
+      }),
+    [product.id, product.name, product.imageCatalog],
+  );
+  const productImageUri =
+    productImageCandidates[0] ?? remoteDisplayUri(product.image) ?? '';
   const imageFit = getImageFitFromUrl(productImageUri);
 
   return (
@@ -208,6 +215,7 @@ export default function ProductCard({
               {productImageUri ? (
                 <CmsRemoteImage
                   uri={productImageUri}
+                  uriCandidates={productImageCandidates}
                   style={styles.productImage}
                   contentFit={imageFit}
                   contentPosition="center"
@@ -218,15 +226,6 @@ export default function ProductCard({
                     id: product.id,
                     name: product.name,
                     ...product.imageCatalog,
-                  }}
-                  onError={() => {
-                    logger.error(
-                      '[IMAGE_MASTER_SHEET] Product card remote image failed',
-                      buildProductImageMasterSheetRow(
-                        { id: product.id, name: product.name, ...product.imageCatalog },
-                        { attemptedUri: productImageUri ?? '', issue: 'load_failed' },
-                      ),
-                    );
                   }}
                 />
               ) : (

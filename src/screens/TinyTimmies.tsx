@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, StatusBar, Platform, ScrollView, TouchableOpacity, Image, ImageSourcePropType } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { RootStackNavigationProp } from '../types/navigation';
 import BackIcon from '../components/icons/BackIcon';
@@ -65,23 +66,21 @@ export default function TinyTimmiesScreen({
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [productSelectedVariants, setProductSelectedVariants] = useState<Record<string, string>>({});
 
-  // Placeholder for API integration
-  useEffect(() => {
-    if (fetchTinyTimmiesData) {
-      const loadData = async () => {
-        setLoading(true);
-        try {
-          const data = await fetchTinyTimmiesData();
-          setTinyTimmiesData(data);
-        } catch (error) {
-          logger.error('Error fetching tiny-timmies data', error);
-          setTinyTimmiesData(EMPTY_TINY_TIMMIES);
-        } finally {
-          setLoading(false);
-        }
-      };
-      loadData();
-    }
+  useRefreshOnFocus(() => {
+    if (!fetchTinyTimmiesData) return;
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const data = await fetchTinyTimmiesData();
+        setTinyTimmiesData(data);
+      } catch (error) {
+        logger.error('Error fetching tiny-timmies data', error);
+        setTinyTimmiesData(EMPTY_TINY_TIMMIES);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void loadData();
   }, [fetchTinyTimmiesData]);
 
   const handleBack = useCallback(() => {

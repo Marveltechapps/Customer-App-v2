@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getOnboardingPages, completeOnboarding, type OnboardingPage } from '../services/onboarding/onboardingService';
 import { tokenManager } from '../services/api/tokenManager';
@@ -191,8 +192,8 @@ function Onboarding({ onComplete }: OnboardingProps) {
     }
   };
 
-  useEffect(() => {
-    fetchPages();
+  useRefreshOnFocus(() => {
+    void fetchPages();
   }, []);
 
   // Auth guard: if already logged in with valid token, stay in app

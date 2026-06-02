@@ -1,6 +1,17 @@
 import { api } from '../api/client';
 import { endpoints } from '../api/endpoints';
-import type { ApiResponse } from '../api/types';
+import type { ApiResponse, RequestConfig } from '../api/types';
+
+/** Bypass HTTP caches (CDN/proxy) and backend response cache for address reads. */
+function freshAddressGetConfig(): RequestConfig {
+  return {
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+    },
+    params: { _: Date.now() },
+  };
+}
 
 export interface Address {
   _id: string;
@@ -48,11 +59,11 @@ export interface UpdateAddressPayload {
 
 export const addressService = {
   getAll: async (): Promise<ApiResponse<Address[]>> => {
-    return api.get<Address[]>(endpoints.addresses.list);
+    return api.get<Address[]>(endpoints.addresses.list, freshAddressGetConfig());
   },
 
   getDefault: async (): Promise<ApiResponse<Address | null>> => {
-    return api.get<Address | null>(endpoints.addresses.default);
+    return api.get<Address | null>(endpoints.addresses.default, freshAddressGetConfig());
   },
 
   create: async (data: CreateAddressPayload): Promise<ApiResponse<Address>> => {

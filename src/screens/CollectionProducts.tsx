@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   StyleSheet,
@@ -44,27 +45,29 @@ export default function CollectionProducts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    api
-      .get(endpoints.collection(collectionId))
-      .then((resp) => {
-        if (!mounted) return;
-        if (resp?.success && resp?.data) {
-          const products = (resp.data.products || []).map(mapProduct);
-          setCollection({ name: resp.data.name || 'Collection', products });
-        } else {
-          setError('Collection not found');
-        }
-      })
-      .catch((err) => {
-        if (mounted) setError(getApiErrorMessage(err, 'Failed to load collection'));
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-    return () => { mounted = false; };
+  const loadCollection = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await api.get(endpoints.collection(collectionId));
+      if (resp?.success && resp?.data) {
+        const products = (resp.data.products || []).map(mapProduct);
+        setCollection({ name: resp.data.name || 'Collection', products });
+      } else {
+        setCollection(null);
+        setError('Collection not found');
+      }
+    } catch (err) {
+      setCollection(null);
+      setError(getApiErrorMessage(err, 'Failed to load collection'));
+    } finally {
+      setLoading(false);
+    }
   }, [collectionId]);
+
+  useRefreshOnFocus(() => {
+    void loadCollection();
+  }, [loadCollection]);
 
   if (loading) {
     return (

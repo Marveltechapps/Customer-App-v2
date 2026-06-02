@@ -59,6 +59,10 @@ export type RootStackParamList = {
     deliveryTip?: number;
     appliedCoupon?: { code: string; discount: number };
     addressId?: string;
+    /** Pre-select method from Cart/Checkout Pay Now */
+    initialPaymentMethod?: 'cash' | 'card' | 'upi' | 'wallet';
+    /** When true, start Worldline immediately after order create (card/UPI from checkout) */
+    autoStartGateway?: boolean;
     /** Standalone `/api/payment/initiate` → SDK (or simulate) → `/api/payment/callback` flow */
     standaloneSession?: {
       sessionPayload: unknown;

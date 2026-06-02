@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -24,31 +25,27 @@ const PrivacyPolicy: React.FC = () => {
   const [doc, setDoc] = useState<LegalDocumentData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchPrivacy = async () => {
-      setLoading(true);
-      try {
-        const res = await getPrivacy();
-        if (cancelled) return;
-        if (res.success && res.data) {
-          setTitle(res.data.title || FALLBACK_TITLE);
-          setDoc(res.data);
-        } else {
-          setDoc({ content: FALLBACK_PRIVACY, contentFormat: 'plain', title: FALLBACK_TITLE, version: '', effectiveDate: '', lastUpdated: '' });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          logger.error('Error fetching privacy content', err);
-          setDoc({ content: FALLBACK_PRIVACY, contentFormat: 'plain', title: FALLBACK_TITLE, version: '', effectiveDate: '', lastUpdated: '' });
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+  const fetchPrivacy = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await getPrivacy();
+      if (res.success && res.data) {
+        setTitle(res.data.title || FALLBACK_TITLE);
+        setDoc(res.data);
+      } else {
+        setDoc({ content: FALLBACK_PRIVACY, contentFormat: 'plain', title: FALLBACK_TITLE, version: '', effectiveDate: '', lastUpdated: '' });
       }
-    };
-    fetchPrivacy();
-    return () => { cancelled = true; };
+    } catch (err) {
+      logger.error('Error fetching privacy content', err);
+      setDoc({ content: FALLBACK_PRIVACY, contentFormat: 'plain', title: FALLBACK_TITLE, version: '', effectiveDate: '', lastUpdated: '' });
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useRefreshOnFocus(() => {
+    void fetchPrivacy();
+  }, [fetchPrivacy]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

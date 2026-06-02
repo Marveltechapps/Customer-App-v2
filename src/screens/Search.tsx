@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import { View, StyleSheet, StatusBar, Platform, ScrollView, TextInput, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -30,6 +31,13 @@ export default function SearchScreen({
   const [searchText, setSearchText] = useState('');
   const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [focusRefreshNonce, setFocusRefreshNonce] = useState(0);
+
+  useRefreshOnFocus(() => {
+    if (searchText.trim().length > 0) {
+      setFocusRefreshNonce((n) => n + 1);
+    }
+  }, [searchText]);
 
   useEffect(() => {
     const query = searchText.trim();
@@ -75,7 +83,7 @@ export default function SearchScreen({
 
     const debounceTimer = setTimeout(performSearch, 300);
     return () => clearTimeout(debounceTimer);
-  }, [searchText, fetchSearchData]);
+  }, [searchText, fetchSearchData, focusRefreshNonce]);
 
   const handleBack = () => {
     navigation.goBack();

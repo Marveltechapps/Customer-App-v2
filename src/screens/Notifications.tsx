@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useRefreshAppConfigOnFocus } from '../hooks/useRefreshAppConfigOnFocus';
 import {
   View,
   Text,
@@ -54,6 +55,8 @@ const Notifications: React.FC = () => {
   const [dndEnabled, setDndEnabled] = useState(false);
   const [dndStart, setDndStart] = useState(dndStartDefault);
   const [dndEnd, setDndEnd] = useState(dndEndDefault);
+
+  useRefreshAppConfigOnFocus();
 
   useEffect(() => {
     setLocalSettings(notificationSettings);

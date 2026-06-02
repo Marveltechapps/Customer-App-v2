@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -21,22 +22,22 @@ const Refunds: React.FC = () => {
   const [refunds, setRefunds] = useState<RefundItem[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const loadRefunds = async () => {
-      setLoading(true);
-      try {
-        const result = await fetchRefunds(1, 20);
-        setRefunds(result.refunds ?? []);
-      } catch (error) {
-        logger.error('Error fetching refunds', error);
-        setRefunds([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadRefunds();
+  const loadRefunds = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await fetchRefunds(1, 20);
+      setRefunds(result.refunds ?? []);
+    } catch (error) {
+      logger.error('Error fetching refunds', error);
+      setRefunds([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useRefreshOnFocus(() => {
+    void loadRefunds();
+  }, [loadRefunds]);
 
   const handleViewDetails = useCallback(
     (item: RefundItem) => {

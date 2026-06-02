@@ -11,7 +11,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import type { OrdersStackNavigationProp, RootStackNavigationProp } from '../types/navigation';
 import Header from '../components/layout/Header';
 import { logger } from '@/utils/logger';
@@ -20,7 +21,6 @@ import CheckmarkIcon from '../assets/images/checkmark-icon.svg';
 import CancelIcon from '../assets/images/cancel-icon.svg';
 import ChevronRightIcon from '../assets/images/chevron-right.svg';
 
-const PRODUCT_IMAGE_FALLBACK = require('../assets/images/product-image-1.png');
 
 type FilterType = 'all' | 'delivered' | 'cancelled' | 'in_progress';
 
@@ -100,13 +100,11 @@ const MyOrders: React.FC = () => {
   const isFirstFocus = useRef(true);
 
   // Fetch on every focus: show loading only on first focus; refetch in background on subsequent focus so cancellations from dashboard are reflected
-  useFocusEffect(
-    useCallback(() => {
-      const showLoading = isFirstFocus.current;
-      if (isFirstFocus.current) isFirstFocus.current = false;
-      fetchOrders({ showLoading });
-    }, [fetchOrders])
-  );
+  useRefreshOnFocus(() => {
+    const showLoading = isFirstFocus.current;
+    if (isFirstFocus.current) isFirstFocus.current = false;
+    void fetchOrders({ showLoading });
+  }, [fetchOrders]);
 
   const handleOrderPress = useCallback((order: Order) => {
     try {
@@ -180,22 +178,17 @@ const MyOrders: React.FC = () => {
                         index > 0 && { marginLeft: 8 }
                       ]}
                     >
-                      <Image
-                        source={product.image ? { uri: product.image } : PRODUCT_IMAGE_FALLBACK}
-                        style={styles.productImage}
-                        resizeMode="cover"
-                      />
+                      {product.image ? (
+                        <Image
+                          source={{ uri: product.image }}
+                          style={styles.productImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.productImage} />
+                      )}
                     </View>
                   ))}
-                  {(item.items ?? []).length === 0 && (
-                    <View style={styles.productImageWrapper}>
-                      <Image
-                        source={PRODUCT_IMAGE_FALLBACK}
-                        style={styles.productImage}
-                        resizeMode="cover"
-                      />
-                    </View>
-                  )}
                 </View>
                 <View style={styles.deliveryInfoContainer}>
                   <View style={styles.orderInfoTop}>

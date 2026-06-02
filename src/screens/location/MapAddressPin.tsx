@@ -172,12 +172,17 @@ const MapAddressPin: React.FC = () => {
     });
   };
 
+  const headerTitle =
+    routeLocation?.useGPS || routeLocation?.title === 'Current Location'
+      ? 'Current Location'
+      : routeLocation?.title?.trim() || 'Select location';
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <View style={styles.headerContainer}>
-          <Header title="" />
+          <Header title={headerTitle} />
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#034703" />
@@ -192,7 +197,7 @@ const MapAddressPin: React.FC = () => {
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <View style={styles.headerContainer}>
-          <Header title="" />
+          <Header title={headerTitle} />
         </View>
         <View style={styles.loadingContainer}>
           <Text style={styles.errorText}>Could not get location. Please try again.</Text>
@@ -208,7 +213,7 @@ const MapAddressPin: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={styles.headerContainer}>
-        <Header title="" />
+        <Header title={headerTitle} />
       </View>
       <View style={styles.mapContainer}>
         <MapView
@@ -283,11 +288,13 @@ const MapAddressPin: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
   },
   headerContainer: {
     width: '100%',
-    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E8E8E8',
   },
   mapContainer: {
     flex: 1,

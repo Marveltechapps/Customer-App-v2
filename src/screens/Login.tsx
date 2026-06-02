@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackRouteProp } from '../types/navigation';
 
@@ -82,8 +83,8 @@ const Login: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     return () => { mounted = false; };
   }, [navigation, route.params?.fromSplash]);
 
-  useEffect(() => {
-    getLegalConfig()
+  useRefreshOnFocus(() => {
+    void getLegalConfig()
       .then((res) => {
         if (res.success && res.data?.loginLegal) setLoginLegal(res.data.loginLegal);
       })

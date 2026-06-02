@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
   Text,
@@ -31,28 +32,21 @@ const RateOrder: React.FC = () => {
   const [comment, setComment] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
-  // Placeholder for API call - Replace with actual API later
-  useEffect(() => {
-    const fetchOrderData = async () => {
-      setLoading(true);
-      try {
-        // TODO: Replace with actual API call
-        // const response = await fetch(`/api/orders/${orderId}`);
-        // const data = await response.json();
-        // Pre-fill if order already has rating
-
-        // Using dummy data for now
-      } catch (error) {
-        logger.error('Error fetching order data', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (orderId) {
-      fetchOrderData();
+  const fetchOrderData = useCallback(async () => {
+    if (!orderId) return;
+    setLoading(true);
+    try {
+      // TODO: load existing rating from API when available
+    } catch (error) {
+      logger.error('Error fetching order data', error);
+    } finally {
+      setLoading(false);
     }
   }, [orderId]);
+
+  useRefreshOnFocus(() => {
+    void fetchOrderData();
+  }, [fetchOrderData]);
 
   const handleBackPress = () => {
     navigation.goBack();

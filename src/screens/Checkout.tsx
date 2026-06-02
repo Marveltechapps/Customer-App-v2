@@ -37,6 +37,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect, useRoute, useIsFocused } from '@react-navigation/native';
+import { useRefreshAppConfigOnFocus } from '../hooks/useRefreshAppConfigOnFocus';
 import Header from '../components/layout/Header';
 import CartItem, { CartItemData } from '../components/features/cart/CartItem';
 import { logger } from '@/utils/logger';
@@ -62,12 +63,13 @@ import { resolveCartLineImageUrl } from '../utils/productImage';
 import * as cartApiService from '../services/cart/cartService';
 import Toast from 'react-native-toast-message';
 import PlusIcon from '../assets/images/plus.svg';
-import { addressService } from '../services/address/addressService';
+import { addressService, type Address } from '../services/address/addressService';
 import type { RootStackNavigationProp } from '../types/navigation';
 import { getToken } from '@/utils/storage';
 import { tokenManager } from '../services/api/tokenManager';
 import { updateProfile } from '../services/profile/profileService';
 import userService from '../services/user/userService';
+import { subscribeAddressesChanged } from '../utils/addressRefresh';
 
 type PaymentMethodOption = 'wallet' | 'cash' | 'card' | 'upi';
 
@@ -100,7 +102,8 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
     flushAndRefreshCart,
     syncing,
   } = useCart();
-  const [selectedMethod] = useState<PaymentMethodOption>('cash');
+  /** Cart screen: coupons priced as COD; user chooses card/UPI/cash on Payment screen */
+  const CHECKOUT_PRICING_PAYMENT_METHOD = 'COD';
 
   const tipAmounts = appConfig.checkout?.tipAmounts ?? [10, 20, 30];
   const deliveryInstructions = appConfig.checkout?.deliveryInstructions ?? ['No Contact Delivery', "Don't ring the bell", 'Pet at home'];
@@ -238,6 +241,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
   );
   const [deliveryAddressTitle, setDeliveryAddressTitle] = useState<string | undefined>(undefined);
   const [addressId, setAddressId] = useState<string | undefined>(undefined);
+  const addressIdRef = useRef<string | undefined>(undefined);
   
   // Delivery tip state
   const [deliveryTip, setDeliveryTip] = useState<number | undefined>(
@@ -323,14 +327,52 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
     () => ({
       couponCode: appliedCoupon?.code,
       zone: contextLocation?.area || undefined,
-      paymentMethod: selectedMethod === 'cash' ? 'COD' : selectedMethod.toUpperCase(),
+      paymentMethod: CHECKOUT_PRICING_PAYMENT_METHOD,
     }),
-    [appliedCoupon?.code, contextLocation?.area, selectedMethod]
+    [appliedCoupon?.code, contextLocation?.area]
   );
   const pricingContextRef = useRef(pricingContext);
   pricingContextRef.current = pricingContext;
   const userRef = useRef(user);
   userRef.current = user;
+
+  useEffect(() => {
+    addressIdRef.current = addressId;
+  }, [addressId]);
+
+  const applyCheckoutAddress = useCallback((addr: Address) => {
+    addressIdRef.current = addr._id;
+    setAddressId(addr._id);
+    setDeliveryAddressTitle(addr.label || 'Home');
+    const parts = [addr.line1, addr.line2, addr.landmark, addr.city, addr.state, addr.pincode].filter(
+      Boolean,
+    );
+    setDeliveryAddress(parts.join(', '));
+  }, []);
+
+  const loadCheckoutAddress = useCallback(async () => {
+    try {
+      const res = await addressService.getAll();
+      if (!res?.success || !Array.isArray(res.data) || res.data.length === 0) {
+        addressIdRef.current = undefined;
+        setAddressId(undefined);
+        setDeliveryAddress(undefined);
+        setDeliveryAddressTitle(undefined);
+        return;
+      }
+      const list = res.data;
+      const preferredId = addressIdRef.current;
+      const selected =
+        (preferredId ? list.find((a) => a._id === preferredId) : undefined) ||
+        list.find((a) => a.isDefault) ||
+        list[0];
+      if (selected) {
+        applyCheckoutAddress(selected);
+      }
+    } catch {
+      logger.warn('Failed to fetch addresses for checkout');
+    }
+  }, [applyCheckoutAddress]);
 
   // Button press animations (max 6 tip buttons: 5 presets + custom)
   const paymentButtonScale = useRef(new Animated.Value(1)).current;
@@ -363,20 +405,6 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
     useCallback(() => {
       let mounted = true;
       refreshCartWithPricingContext(pricingContextRef.current).catch(() => {});
-      const loadDefaultAddress = async () => {
-        try {
-          const res = await addressService.getDefault();
-          if (mounted && res?.success && res.data) {
-            const addr = res.data;
-            setAddressId(addr._id);
-            setDeliveryAddressTitle(addr.label || 'Home');
-            const parts = [addr.line1, addr.line2, addr.city, addr.state, addr.pincode].filter(Boolean);
-            setDeliveryAddress(parts.join(', '));
-          }
-        } catch {
-          logger.warn('Failed to fetch default address for checkout');
-        }
-      };
       const loadCheckoutContactFields = async () => {
         try {
           const token = await tokenManager.getAccessToken();
@@ -464,11 +492,17 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
           setSaveContactForFuture(false);
         }
       };
-      loadDefaultAddress();
+      void loadCheckoutAddress();
       loadCheckoutContactFields();
       return () => { mounted = false; };
-    }, [refreshCartWithPricingContext])
+    }, [loadCheckoutAddress, refreshCartWithPricingContext])
   );
+
+  useEffect(() => {
+    return subscribeAddressesChanged(() => {
+      void loadCheckoutAddress();
+    });
+  }, [loadCheckoutAddress]);
 
   const prevPricingContextKeyRef = useRef('');
   useEffect(() => {
@@ -662,7 +696,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
           is_on_sale: (item as any).isOnSale || false
         })),
         cart_value: billSummary.itemTotal,
-        payment_method: selectedMethod === 'cash' ? 'COD' : selectedMethod.toUpperCase(),
+        payment_method: CHECKOUT_PRICING_PAYMENT_METHOD,
         zone: contextLocation?.area || '',
         delivery_fee: billSummary.deliveryFee
       });
@@ -726,7 +760,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
         user_id: userKey,
         cart_value: billSummary.itemTotal,
         zone: contextLocation?.area || '',
-        payment_method: selectedMethod === 'cash' ? 'COD' : selectedMethod.toUpperCase(),
+        payment_method: CHECKOUT_PRICING_PAYMENT_METHOD,
       });
 
       if (res.success && res.data?.coupons) {
@@ -762,11 +796,15 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
     } catch (err) {
       logger.warn('Failed to fetch coupons for nudge', err);
     }
-  }, [isCartTab, userKey, contextLocation?.area, selectedMethod, appliedCoupon, cartItems, serverPricing.itemTotal]);
+  }, [isCartTab, userKey, contextLocation?.area, appliedCoupon, cartItems, serverPricing.itemTotal]);
 
-  useEffect(() => {
-    fetchAvailableCoupons();
-  }, [fetchAvailableCoupons]);
+  useRefreshAppConfigOnFocus();
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchAvailableCoupons();
+    }, [fetchAvailableCoupons])
+  );
 
   const handleAddressPress = () => {
     navigation.navigate('Addresses');
