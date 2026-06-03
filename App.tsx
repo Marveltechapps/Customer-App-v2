@@ -24,7 +24,6 @@
  *   - Addresses
  *   - Refunds
  *   - Profile
- *   - Payment management
  *   - General Info
  *   - Notifications
  *

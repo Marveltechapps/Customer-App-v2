@@ -45,7 +45,9 @@ const formatDate = (dateStr: string): string => {
 };
 
 const isOnlinePrepay = (o: Order) =>
-  o.paymentMethod?.type === 'card' || o.paymentMethod?.type === 'upi';
+  o.paymentMethod?.type === 'card' ||
+  o.paymentMethod?.type === 'upi' ||
+  o.paymentMethod?.type === 'digital';
 
 const getStatusLabel = (order: Order): string => {
   if (isOnlinePrepay(order) && order.paymentStatus === 'pending' && order.status === 'pending') {

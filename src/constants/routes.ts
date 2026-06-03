@@ -57,7 +57,6 @@ export const ROUTES = {
   PROFILE: 'Profile',
   PROFILE_UPDATE_SUCCESS: 'ProfileUpdateSuccess',
   SETTINGS: 'Settings',
-  PAYMENT_MANAGEMENT: 'PaymentManagement',
   
   // Support routes
   CUSTOMER_SUPPORT: 'CustomerSupport',

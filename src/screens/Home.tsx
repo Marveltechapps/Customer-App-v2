@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, StatusBar, Text, ScrollView, Animated, NativeScrollEvent, NativeSyntheticEvent, Easing, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, StatusBar, Text, ScrollView, Animated, NativeScrollEvent, NativeSyntheticEvent, Easing, TouchableOpacity, InteractionManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useCatalogCache } from '../contexts/CatalogCacheContext';
@@ -23,6 +23,7 @@ import { navigationFlags } from '../utils/navigationFlags';
 import { getEnvConfigSafe } from '../config/env';
 import CmsRemoteImage from '../components/common/CmsRemoteImage';
 import { Theme } from '../constants/Theme';
+import { prewarmSettingsModule } from '../utils/prewarmSettingsModule';
 
 const MAX_SECTIONS = 20;
 
@@ -125,6 +126,10 @@ export default function HomeScreen() {
   const hasAnimatedOnceRef = useRef(false);
   useFocusEffect(
     useCallback(() => {
+      const prewarmTask = InteractionManager.runAfterInteractions(() => {
+        prewarmSettingsModule();
+      });
+
       // Screen is focused
       setIsScreenFocused(true);
       if (!hasAnimatedOnceRef.current) {
@@ -159,6 +164,7 @@ export default function HomeScreen() {
 
       // Cleanup when screen loses focus
       return () => {
+        prewarmTask.cancel();
         setIsScreenFocused(false);
       };
     }, [])
@@ -266,6 +272,7 @@ export default function HomeScreen() {
                 searchPlaceholder={homeConfig?.searchPlaceholder ?? appConfig.search?.placeholder ?? 'Search for products'}
                 heroVideoUrl={homeConfig?.heroVideoUrl ?? undefined}
                 onLocationPress={handleLocationPress}
+                onProfilePressIn={prewarmSettingsModule}
                 onProfilePress={handleProfilePress}
                 onLayout={handleVideoLayout}
                 isVisible={isVideoVisible}

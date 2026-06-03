@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { storeService } from '../services/store/storeService';
-import { useUser } from './UserContext';
+import UserContext from './UserContext';
 
 const STORAGE_KEY = '@selorg_user_location';
 const STORE_KEY = '@selorg_assigned_store';
@@ -48,7 +48,10 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(false);
   const [assignedStore, setAssignedStore] = useState<AssignedStore | null>(null);
   const [serviceable, setServiceable] = useState(true);
-  const { user, isRestoring, userKey } = useUser();
+  // Read UserContext safely so transient hot-refresh timing doesn't crash the app.
+  const userCtx = useContext(UserContext);
+  const isRestoring = userCtx?.isRestoring ?? false;
+  const userKey = userCtx?.userKey ?? GUEST_KEY;
 
   // Active storage bucket: the authenticated user's primary key (phone), or "guest".
   // userKey is derived in UserContext to ensure consistency across the app.

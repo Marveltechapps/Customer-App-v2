@@ -18,6 +18,8 @@ interface TopSectionProps {
   heroVideoUrl?: string | null;
   onLocationPress?: () => void;
   onProfilePress?: () => void;
+  /** Fires on touch-down so Settings chunk can load before navigate completes. */
+  onProfilePressIn?: () => void;
   onSearch?: (text: string) => void;
   onLayout?: (layout: { y: number; height: number }) => void;
   isVisible?: boolean;
@@ -118,6 +120,7 @@ const homepageVideo = require('../../assets/videos/homepage_video.mp4');
     heroVideoUrl,
     onLocationPress,
     onProfilePress,
+    onProfilePressIn,
     onSearch,
     onLayout,
     isVisible = true,
@@ -245,6 +248,7 @@ const homepageVideo = require('../../assets/videos/homepage_video.mp4');
           </View>
           <TouchableOpacity
             style={styles.profileButton}
+            onPressIn={onProfilePressIn}
             onPress={onProfilePress}
             activeOpacity={0.7}
           >

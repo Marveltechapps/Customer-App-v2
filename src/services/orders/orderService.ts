@@ -43,7 +43,7 @@ export interface Order {
   };
   paymentMethod: {
     id: string;
-    type: 'card' | 'upi' | 'cash' | 'wallet';
+    type: 'card' | 'upi' | 'cash' | 'wallet' | 'digital';
     last4?: string;
   };
   paymentStatus: 'paid' | 'pending' | 'failed' | 'cod_pending';
@@ -73,9 +73,13 @@ export interface CreateOrderRequest {
   }>;
   addressId: string;
   paymentMethodId: string;
-  paymentMethodType?: 'cash' | 'card' | 'upi' | 'wallet';
+  paymentMethodType?: 'cash' | 'card' | 'upi' | 'wallet' | 'digital';
   couponCode?: string;
   deliveryTip?: number;
+  /** Checkout contact details (used to populate admin customer name/email). */
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
 }
 
 export interface RateOrderRequest {

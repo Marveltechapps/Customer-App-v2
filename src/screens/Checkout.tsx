@@ -71,8 +71,6 @@ import { updateProfile } from '../services/profile/profileService';
 import userService from '../services/user/userService';
 import { subscribeAddressesChanged } from '../utils/addressRefresh';
 
-type PaymentMethodOption = 'wallet' | 'cash' | 'card' | 'upi';
-
 /** Space reserved so last scroll content clears the absolute-positioned address + payment bar (not oversized). */
 /** Extra scroll padding so the last card clears the Pay footer when keyboard is closed. */
 const CHECKOUT_FOOTER_SCROLL_CLEARANCE = 180;
@@ -102,8 +100,8 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
     flushAndRefreshCart,
     syncing,
   } = useCart();
-  /** Cart screen: coupons priced as COD; user chooses card/UPI/cash on Payment screen */
-  const CHECKOUT_PRICING_PAYMENT_METHOD = 'COD';
+  /** Use a neutral method so checkout/cart/pricing stay consistent before final payment selection. */
+  const CHECKOUT_PRICING_PAYMENT_METHOD = 'ALL';
 
   const tipAmounts = appConfig.checkout?.tipAmounts ?? [10, 20, 30];
   const deliveryInstructions = appConfig.checkout?.deliveryInstructions ?? ['No Contact Delivery', "Don't ring the bell", 'Pet at home'];
@@ -261,7 +259,6 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
   const [saveContactForFuture, setSaveContactForFuture] = useState(false);
   const [paymentInitError, setPaymentInitError] = useState<string | null>(null);
   const [isPayNowLoading, setIsPayNowLoading] = useState(false);
-  const [keyboardInset, setKeyboardInset] = useState(0);
 
   // Applied coupon state
   const [appliedCoupon, setAppliedCoupon] = useState<{
@@ -282,26 +279,13 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
 
   const { location: contextLocation, assignedStore } = useLocation();
   const { user, userKey } = useUser();
+  const userRef = useRef(user);
+  userRef.current = user;
 
   // Dynamic delivery fee and ETA from backend
   const [dynamicDeliveryFee, setDynamicDeliveryFee] = useState(0);
   const [dynamicSurgeCharge, setDynamicSurgeCharge] = useState(0);
   const [deliveryPromiseText, setDeliveryPromiseText] = useState('');
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      setKeyboardInset(e.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardInset(0);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
 
   useEffect(() => {
     if (!assignedStore?.id || !contextLocation) return;
@@ -333,8 +317,55 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
   );
   const pricingContextRef = useRef(pricingContext);
   pricingContextRef.current = pricingContext;
-  const userRef = useRef(user);
-  userRef.current = user;
+  const resolveCheckoutContact = useCallback(
+    (
+      sourceUser: (typeof user) | null | undefined,
+      savedContact?: { fullName?: string; email?: string; phone?: string } | null,
+    ) => {
+      const fallbackName =
+        (sourceUser as { name?: string; fullName?: string } | null)?.name ??
+        (sourceUser as { fullName?: string } | null)?.fullName;
+      const fallbackEmail = sourceUser?.email != null ? String(sourceUser.email) : '';
+      const fallbackPhone = sourceUser?.phoneNumber != null ? String(sourceUser.phoneNumber) : '';
+      return {
+        fullName:
+          savedContact?.fullName != null && String(savedContact.fullName).trim()
+            ? String(savedContact.fullName).trim()
+            : fallbackName
+            ? String(fallbackName).trim()
+            : '',
+        email:
+          savedContact?.email != null && String(savedContact.email).trim()
+            ? String(savedContact.email).trim()
+            : fallbackEmail,
+        phone:
+          savedContact?.phone != null && String(savedContact.phone).trim()
+            ? String(savedContact.phone).replace(/\s/g, '')
+            : fallbackPhone,
+        hasSaved: Boolean(
+          savedContact &&
+            ((savedContact.fullName && String(savedContact.fullName).trim()) ||
+              (savedContact.email && String(savedContact.email).trim()) ||
+              (savedContact.phone && String(savedContact.phone).trim()))
+        ),
+      };
+    },
+    []
+  );
+
+  // Keep checkout contact fields in sync with shared user state immediately.
+  useEffect(() => {
+    const contact = resolveCheckoutContact(user ?? null);
+    logger.info('[checkout] user-context contact sync', {
+      name: contact.fullName,
+      email: contact.email,
+      phone: contact.phone,
+    });
+    setCustomerName(contact.fullName);
+    setCustomerEmail(contact.email);
+    setCustomerPhone(contact.phone);
+    setSaveContactForFuture(false);
+  }, [user?.name, (user as { fullName?: string } | null)?.fullName, user?.email, user?.phoneNumber, resolveCheckoutContact]);
 
   useEffect(() => {
     addressIdRef.current = addressId;
@@ -417,19 +448,12 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
             }
             return;
           }
-          // Show account details immediately while the profile request loads; server may override with savedCheckoutContact.
+          // Show account details immediately while profile request loads.
           if (mounted) {
-            const currentUser = userRef.current;
-            const optimisticName =
-              (currentUser as { name?: string; fullName?: string } | null)?.name ??
-              (currentUser as { fullName?: string } | null)?.fullName;
-            if (optimisticName) {
-              setCustomerName(String(optimisticName));
-            } else {
-              setCustomerName('');
-            }
-            setCustomerEmail(currentUser?.email != null ? String(currentUser.email) : '');
-            setCustomerPhone(currentUser?.phoneNumber != null ? String(currentUser.phoneNumber) : '');
+            const immediate = resolveCheckoutContact(userRef.current ?? null);
+            setCustomerName(immediate.fullName);
+            setCustomerEmail(immediate.email);
+            setCustomerPhone(immediate.phone);
             setSaveContactForFuture(false);
           }
           const res = await userService.getProfile();
@@ -456,46 +480,27 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
           if (!mounted) {
             return;
           }
-          if (sc && (sc.fullName || sc.email || sc.phone)) {
-            setCustomerName(sc.fullName != null ? String(sc.fullName) : '');
-            setCustomerEmail(sc.email != null ? String(sc.email) : '');
-            setCustomerPhone(sc.phone != null ? String(sc.phone) : '');
-            setSaveContactForFuture(true);
-            return;
-          }
-          const name =
-            (userRef.current as { name?: string; fullName?: string } | null)?.name ??
-            (userRef.current as { fullName?: string } | null)?.fullName;
-          if (name) {
-            setCustomerName(String(name));
-          } else {
-            setCustomerName('');
-          }
-          setCustomerEmail(userRef.current?.email != null ? String(userRef.current.email) : '');
-          setCustomerPhone(userRef.current?.phoneNumber != null ? String(userRef.current.phoneNumber) : '');
-          setSaveContactForFuture(false);
+          const resolved = resolveCheckoutContact(userRef.current ?? null, sc);
+          setCustomerName(resolved.fullName);
+          setCustomerEmail(resolved.email);
+          setCustomerPhone(resolved.phone);
+          setSaveContactForFuture(resolved.hasSaved);
         } catch {
           logger.warn('Failed to load profile for checkout contact');
           if (!mounted) {
             return;
           }
-          const name =
-            (userRef.current as { name?: string; fullName?: string } | null)?.name ??
-            (userRef.current as { fullName?: string } | null)?.fullName;
-          if (name) {
-            setCustomerName(String(name));
-          } else {
-            setCustomerName('');
-          }
-          setCustomerEmail(userRef.current?.email != null ? String(userRef.current.email) : '');
-          setCustomerPhone(userRef.current?.phoneNumber != null ? String(userRef.current.phoneNumber) : '');
+          const fallback = resolveCheckoutContact(userRef.current ?? null);
+          setCustomerName(fallback.fullName);
+          setCustomerEmail(fallback.email);
+          setCustomerPhone(fallback.phone);
           setSaveContactForFuture(false);
         }
       };
       void loadCheckoutAddress();
       loadCheckoutContactFields();
       return () => { mounted = false; };
-    }, [loadCheckoutAddress, refreshCartWithPricingContext])
+    }, [loadCheckoutAddress, refreshCartWithPricingContext, resolveCheckoutContact])
   );
 
   useEffect(() => {
@@ -753,7 +758,6 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
 
   // Fetch coupons for nudge banner
   const fetchAvailableCoupons = useCallback(async () => {
-    if (!isCartTab) return;
     try {
       const billSummary = calculateBillSummary();
       const res = await couponService.listCoupons({
@@ -796,7 +800,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
     } catch (err) {
       logger.warn('Failed to fetch coupons for nudge', err);
     }
-  }, [isCartTab, userKey, contextLocation?.area, appliedCoupon, cartItems, serverPricing.itemTotal]);
+  }, [userKey, contextLocation?.area, appliedCoupon, cartItems, serverPricing.itemTotal]);
 
   useRefreshAppConfigOnFocus();
 
@@ -937,6 +941,9 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
         deliveryTip: deliveryTip,
         appliedCoupon: appliedCoupon || undefined,
         addressId: addressId,
+        customerName: name,
+        customerEmail: email || undefined,
+        customerPhone: phone || undefined,
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Could not continue to payment';
@@ -1033,8 +1040,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 0}
+        behavior={undefined}
       >
       <Header 
         title="My Cart" 
@@ -1051,7 +1057,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
           {
             paddingBottom:
               cartItems.length > 0
-                ? CHECKOUT_FOOTER_SCROLL_CLEARANCE + Math.max(insets.bottom, 12) + keyboardInset
+                ? CHECKOUT_FOOTER_SCROLL_CLEARANCE + Math.max(insets.bottom, 12)
                 : Math.max(insets.bottom, 16),
           },
         ]}
@@ -1392,13 +1398,24 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
                     onPress={() => handleInstructionToggle('no-contact')}
                     activeOpacity={1}
                   >
-                    <View style={styles.deliveryInstructionIconContainerNoContact}>
-                      <NoContactDeliveryIcon width={77} height={14} />
-                      {selectedInstructions.includes('no-contact') && (
-                        <View style={styles.deliveryInstructionCheckmark}>
-                          <Text style={styles.deliveryInstructionCheckmarkText}>✓</Text>
-                        </View>
-                      )}
+                    <View style={styles.deliveryInstructionCheckboxRow}>
+                      <View
+                        style={[
+                          styles.deliveryInstructionCheckbox,
+                          selectedInstructions.includes('no-contact')
+                            ? styles.deliveryInstructionCheckboxChecked
+                            : undefined,
+                        ]}
+                      >
+                        {selectedInstructions.includes('no-contact') ? (
+                          <Text style={styles.deliveryInstructionCheckboxText}>✓</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    <View style={styles.deliveryInstructionIconSlot}>
+                      <View style={styles.deliveryInstructionNoContactClip}>
+                        <NoContactDeliveryIcon width={77} height={14} />
+                      </View>
                     </View>
                     <Text style={styles.deliveryInstructionButtonText}>{deliveryInstructions[0] ?? 'No Contact Delivery'}</Text>
                   </TouchableOpacity>
@@ -1414,13 +1431,22 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
                     onPress={() => handleInstructionToggle('no-bell')}
                     activeOpacity={1}
                   >
-                    <View style={styles.deliveryInstructionIconContainer}>
+                    <View style={styles.deliveryInstructionCheckboxRow}>
+                      <View
+                        style={[
+                          styles.deliveryInstructionCheckbox,
+                          selectedInstructions.includes('no-bell')
+                            ? styles.deliveryInstructionCheckboxChecked
+                            : undefined,
+                        ]}
+                      >
+                        {selectedInstructions.includes('no-bell') ? (
+                          <Text style={styles.deliveryInstructionCheckboxText}>✓</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    <View style={styles.deliveryInstructionIconSlot}>
                       <DontRingBellIcon width={14} height={14} />
-                      {selectedInstructions.includes('no-bell') && (
-                        <View style={styles.deliveryInstructionCheckmark}>
-                          <Text style={styles.deliveryInstructionCheckmarkText}>✓</Text>
-                        </View>
-                      )}
                     </View>
                     <Text style={styles.deliveryInstructionButtonText}>{deliveryInstructions[1] ?? "Don't ring the bell"}</Text>
                   </TouchableOpacity>
@@ -1436,13 +1462,22 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
                     onPress={() => handleInstructionToggle('pet')}
                     activeOpacity={1}
                   >
-                    <View style={styles.deliveryInstructionIconContainer}>
+                    <View style={styles.deliveryInstructionCheckboxRow}>
+                      <View
+                        style={[
+                          styles.deliveryInstructionCheckbox,
+                          selectedInstructions.includes('pet')
+                            ? styles.deliveryInstructionCheckboxChecked
+                            : undefined,
+                        ]}
+                      >
+                        {selectedInstructions.includes('pet') ? (
+                          <Text style={styles.deliveryInstructionCheckboxText}>✓</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    <View style={styles.deliveryInstructionIconSlot}>
                       <PetAtHomeIcon width={14} height={14} />
-                      {selectedInstructions.includes('pet') && (
-                        <View style={styles.deliveryInstructionCheckmark}>
-                          <Text style={styles.deliveryInstructionCheckmarkText}>✓</Text>
-                        </View>
-                      )}
                     </View>
                     <Text style={styles.deliveryInstructionButtonText}>{deliveryInstructions[2] ?? 'Pet at home'}</Text>
                   </TouchableOpacity>
@@ -1486,7 +1521,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
             styles.bottomSection,
             {
               paddingBottom: Math.max(insets.bottom, 12),
-              bottom: keyboardInset > 0 ? keyboardInset + 8 : 12,
+              bottom: 12,
             },
           ]}
         >
@@ -2057,49 +2092,50 @@ const styles = StyleSheet.create({
     padding: 12,
     flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  deliveryInstructionCheckboxRow: {
+    width: '100%',
+    alignItems: 'flex-end',
+  },
+  deliveryInstructionCheckbox: {
+    width: 14,
+    height: 14,
+    borderRadius: 2,
+    borderWidth: 1,
+    borderColor: '#034703',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deliveryInstructionCheckboxChecked: {
+    backgroundColor: '#034703',
+  },
+  deliveryInstructionCheckboxText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    lineHeight: 12,
+  },
+  deliveryInstructionIconSlot: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deliveryInstructionNoContactClip: {
+    width: 14,
+    height: 14,
+    overflow: 'hidden',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   deliveryInstructionButtonEnabled: {
     backgroundColor: '#E0F2F1',
-    gap: 16,
   },
   deliveryInstructionButtonDisabled: {
     backgroundColor: '#F5F5F5',
-    gap: 20,
-  },
-  deliveryInstructionIconContainer: {
-    width: 14,
-    height: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    alignSelf: 'center',
-  },
-  deliveryInstructionIconContainerNoContact: {
-    width: 77,
-    height: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    alignSelf: 'center',
-  },
-  deliveryInstructionCheckmark: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 14,
-    height: 14,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#034703',
-    borderRadius: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deliveryInstructionCheckmarkText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#034703',
-    lineHeight: 14,
   },
   deliveryInstructionButtonText: {
     fontSize: 12,
@@ -2107,6 +2143,8 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
     lineHeight: 19.2, // 1.6000000635782878em
     textAlign: 'center',
+    minHeight: 38,
+    textAlignVertical: 'center',
   },
   additionalInstructionsSection: {
     backgroundColor: '#FFFFFF',

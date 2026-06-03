@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useRefreshAppConfigOnFocus } from '../hooks/useRefreshAppConfigOnFocus';
 import {
   View,
@@ -40,6 +40,10 @@ const Notifications: React.FC = () => {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { appConfig } = useAppConfig();
   const channelsFromConfig = appConfig.notifications?.channelsAvailable ?? [];
+  const channelsSignature = useMemo(
+    () => JSON.stringify(channelsFromConfig.map((c) => [c.key, c.label, c.description, c.isActive])),
+    [channelsFromConfig]
+  );
   const notificationSettings = channelsFromConfig.length > 0
     ? channelsFromConfig.map((c) => ({
         id: c.key ?? '',
@@ -56,11 +60,14 @@ const Notifications: React.FC = () => {
   const [dndStart, setDndStart] = useState(dndStartDefault);
   const [dndEnd, setDndEnd] = useState(dndEndDefault);
 
-  useRefreshAppConfigOnFocus();
+  useRefreshAppConfigOnFocus('Notifications');
 
   useEffect(() => {
+    logger.info('[notifications-perf] UI sync from config', {
+      channels: channelsFromConfig.length,
+    });
     setLocalSettings(notificationSettings);
-  }, [appConfig?.notifications?.channelsAvailable?.length]); // Sync when appConfig loads
+  }, [channelsSignature]); // Sync only when actual channel config changes
 
 
   const handleToggleChange = async (id: string, enabled: boolean) => {

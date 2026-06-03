@@ -39,23 +39,6 @@ export const requestInterceptor = async (config: InternalAxiosRequestConfig): Pr
     config.headers['Content-Type'] = config.headers['Content-Type'] || 'application/json';
   }
 
-  try {
-    // @ts-ignore __DEV__ may be global in RN/Expo
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      // eslint-disable-next-line no-console
-      console.debug('[api][request]', {
-        method: config.method,
-        baseURL: config.baseURL,
-        url: config.url,
-        fullUrl: `${config.baseURL || ''}${config.url || ''}`,
-        data: config.data,
-        headers: config.headers,
-      });
-    }
-  } catch (e) {
-    // ignore logging errors
-  }
-
   return config;
 };
 
@@ -64,20 +47,6 @@ export const requestInterceptor = async (config: InternalAxiosRequestConfig): Pr
  */
 export const responseInterceptor = {
   onFulfilled: (response: AxiosResponse) => {
-    try {
-      // @ts-ignore __DEV__
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        // eslint-disable-next-line no-console
-        console.debug('[api][response]', {
-          status: response.status,
-          url: response.config && `${response.config.baseURL || ''}${response.config.url || ''}`,
-          data: response.data,
-          headers: response.headers,
-        });
-      }
-    } catch (e) {
-      // ignore
-    }
     // Return the full axios response to let higher-level wrappers handle .data consistently
     return response;
   },

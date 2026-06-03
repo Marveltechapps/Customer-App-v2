@@ -2,7 +2,7 @@
  * Contact Support Screen
  * Submit a support ticket from the customer app
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Header from '../components/layout/Header';
 import { createSupportTicket } from '../services/support/supportService';
+import { useUser } from '../contexts/UserContext';
+import { logger } from '@/utils/logger';
 
 const CATEGORIES = [
   'General Inquiry',
@@ -29,12 +31,27 @@ const CATEGORIES = [
 
 const ContactSupport: React.FC = () => {
   const navigation = useNavigation();
+  const { user } = useUser();
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const nextName =
+      (user as { name?: string; fullName?: string } | null)?.name ??
+      (user as { fullName?: string } | null)?.fullName ??
+      '';
+    const nextEmail = user?.email != null ? String(user.email) : '';
+    logger.info('[contact-support] user-context contact sync', {
+      name: nextName,
+      email: nextEmail,
+    });
+    setName(nextName ? String(nextName) : '');
+    setEmail(nextEmail);
+  }, [user?.name, (user as { fullName?: string } | null)?.fullName, user?.email]);
 
   const handleSubmit = async () => {
     if (!subject.trim() || !name.trim() || !email.trim()) {
@@ -44,12 +61,19 @@ const ContactSupport: React.FC = () => {
 
     setSubmitting(true);
     try {
+      const phone =
+        (user as { phoneNumber?: string; phone?: string } | null)?.phoneNumber ??
+        (user as { phone?: string } | null)?.phone ??
+        '';
+
       const result = await createSupportTicket({
         subject: subject.trim(),
         description: description.trim() || subject.trim(),
         category: mapCategoryToApi(category),
         customerName: name.trim(),
         customerEmail: email.trim(),
+        customerPhone: phone ? String(phone).trim() : undefined,
+        customerId: user?.id != null ? String(user.id) : undefined,
       });
 
       setSubmitting(false);

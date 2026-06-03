@@ -136,6 +136,7 @@ export const endpoints = {
         ? `${P}/support/tickets/active?orderNumber=${encodeURIComponent(orderNumber)}`
         : `${P}/support/tickets/active`,
     createTicket: `${P}/support/tickets`,
+    reopenTicket: (ticketId: string) => `${P}/support/tickets/${ticketId}/reopen`,
     ticketMessages: (ticketId: string) => `${P}/support/tickets/${ticketId}/messages`,
     sendMessage: (ticketId: string) => `${P}/support/tickets/${ticketId}/messages`,
   },

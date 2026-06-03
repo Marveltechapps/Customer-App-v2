@@ -34,22 +34,38 @@ const SavedAddressesList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectingId, setSelectingId] = useState<string | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const lastFetchAtRef = React.useRef(0);
 
-  const fetchAddresses = useCallback(async (options?: { silent?: boolean }) => {
+  const fetchAddresses = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
+    const now = Date.now();
+    if (!options?.force && lastFetchAtRef.current && now - lastFetchAtRef.current < 30_000) {
+      logger.info('[addresses-perf] skip focus fetch (fresh cache)', {
+        elapsedMs: now - lastFetchAtRef.current,
+      });
+      return;
+    }
+    const t0 = Date.now();
+    logger.info('[addresses-perf] screen open / fetch start');
     if (!options?.silent) {
-      setLoading(true);
+      setLoading(!hasLoadedOnce);
     }
     try {
+      logger.info('[addresses-perf] API start');
       const response = await addressService.getAll();
+      logger.info('[addresses-perf] API finish', { elapsedMs: Date.now() - t0 });
       if (response.success && response.data) {
         setAddresses(response.data);
+        setHasLoadedOnce(true);
+        lastFetchAtRef.current = Date.now();
       }
     } catch (error) {
       logger.error('Error fetching addresses', error);
     } finally {
       setLoading(false);
+      logger.info('[addresses-perf] UI render complete', { elapsedMs: Date.now() - t0 });
     }
-  }, []);
+  }, [hasLoadedOnce]);
 
   useRefreshOnFocus(() => {
     void fetchAddresses();

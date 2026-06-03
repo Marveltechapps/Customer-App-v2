@@ -47,7 +47,6 @@ export type RootStackParamList = {
   Addresses: undefined;
   Refunds: undefined;
   Profile: undefined;
-  PaymentManagement: undefined;
   GeneralInfo: {
     screen?: 'GeneralInfo' | 'TermsAndConditions' | 'PrivacyPolicy';
   } | undefined;
@@ -59,9 +58,13 @@ export type RootStackParamList = {
     deliveryTip?: number;
     appliedCoupon?: { code: string; discount: number };
     addressId?: string;
+    /** Checkout contact details provided in-app (guest checkout included). */
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
     /** Pre-select method from Cart/Checkout Pay Now */
-    initialPaymentMethod?: 'cash' | 'card' | 'upi' | 'wallet';
-    /** When true, start Worldline immediately after order create (card/UPI from checkout) */
+    initialPaymentMethod?: 'cash' | 'digital' | 'card' | 'upi' | 'wallet';
+    /** When true, start Worldline immediately after order create (digital payment from checkout) */
     autoStartGateway?: boolean;
     /** Standalone `/api/payment/initiate` → SDK (or simulate) → `/api/payment/callback` flow */
     standaloneSession?: {
@@ -187,6 +190,8 @@ export type CustomerSupportStackParamList = {
   CustomerSupport: undefined;
   HelpSubSection: { sectionName: string };
   ContactSupport: undefined;
+  MySupportTickets: undefined;
+  SupportTicketDetail: { ticketId: string };
   GeneralChat: undefined;
 };
 

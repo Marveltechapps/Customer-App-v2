@@ -42,6 +42,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
   const notificationListener = useRef<NotificationSubscriptionLike | null>(null);
   const responseListener = useRef<NotificationSubscriptionLike | null>(null);
+  const expoGoPushWarnedRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -87,7 +88,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Skip push setup and listeners in Expo Go (dev client recommended for full support)
     const isExpoGo = Constants.appOwnership === 'expo';
     if (isExpoGo) {
-      logger.warn('Skipping push registration and notification listeners in Expo Go / Expo client.');
+      if (!expoGoPushWarnedRef.current) {
+        logger.warn('Skipping push registration and notification listeners in Expo Go / Expo client.');
+        expoGoPushWarnedRef.current = true;
+      }
       return;
     }
 

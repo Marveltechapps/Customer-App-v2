@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
@@ -10,59 +10,242 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import type { RootStackNavigationProp } from '../types/navigation';
 import Header from '../components/layout/Header';
 import ProfileUpdateSuccess from './ProfileUpdateSuccess';
 import { logger } from '@/utils/logger';
-import { userService } from '../services/user/userService';
-import { api } from '../services/api/client';
-import { endpoints } from '../services/api/endpoints';
-
-interface ProfileData {
-  name: string;
-  mobileNumber: string;
-  emailAddress: string;
-}
+import { getProfile, updateProfile } from '../services/profile/profileService';
+import { useUser } from '../contexts/UserContext';
+import { saveUserData } from '../utils/storage';
 
 const Profile: React.FC = () => {
-  const navigation = useNavigation<RootStackNavigationProp>();
+  const { user, setUser } = useUser();
+  const userRef = useRef(user);
   const [name, setName] = useState<string>('');
   const [mobileNumber, setMobileNumber] = useState<string>('');
   const [emailAddress, setEmailAddress] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [isFetchingProfile, setIsFetchingProfile] = useState(false);
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const lastFetchAtRef = useRef(0);
 
-  const fetchProfileData = useCallback(async () => {
-    setLoading(true);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const normalizeEmail = (value: unknown): string => {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    // Backend temporary placeholder for OTP-only users should not replace real email.
+    if (/^no-email-.*@no-email\.selorg$/i.test(trimmed)) return '';
+    return trimmed;
+  };
+
+  const firstNonEmpty = (...values: Array<unknown>): string => {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    return '';
+  };
+
+  const applyProfileData = (raw: Record<string, any> | undefined, fallback?: Record<string, any> | null) => {
+    if (!raw) {
+      return;
+    }
+    const savedCheckoutContact = (raw.savedCheckoutContact ?? {}) as Record<string, any>;
+    const fallbackSavedCheckoutContact = ((fallback?.savedCheckoutContact ?? {}) as Record<string, any>);
+    setName(
+      firstNonEmpty(
+        raw.name,
+        raw.fullName,
+        savedCheckoutContact.fullName,
+        fallback?.name,
+        fallback?.fullName,
+        fallbackSavedCheckoutContact.fullName
+      )
+    );
+    setMobileNumber(
+      firstNonEmpty(
+        raw.phoneNumber,
+        raw.mobileNumber,
+        raw.phone,
+        raw.mobile,
+        savedCheckoutContact.phone,
+        fallback?.phoneNumber,
+        fallback?.mobileNumber,
+        fallback?.phone,
+        fallback?.mobile,
+        fallbackSavedCheckoutContact.phone
+      )
+    );
+    const resolvedEmail = firstNonEmpty(
+      normalizeEmail(raw.email),
+      normalizeEmail(raw.emailAddress),
+      normalizeEmail(savedCheckoutContact.email),
+      normalizeEmail(fallback?.email),
+      normalizeEmail(fallback?.emailAddress),
+      normalizeEmail(fallbackSavedCheckoutContact.email)
+    );
+    setEmailAddress(resolvedEmail);
+  };
+
+  useEffect(() => {
+    if (user) {
+      applyProfileData(user as Record<string, any>, null);
+    }
+  }, [user]);
+
+  const fetchProfileData = useCallback(async (options?: { force?: boolean }) => {
+    const now = Date.now();
+    if (!options?.force && lastFetchAtRef.current && now - lastFetchAtRef.current < 45_000) {
+      logger.info('[profile-perf] skip focus fetch (fresh cache)', {
+        elapsedMs: now - lastFetchAtRef.current,
+      });
+      return;
+    }
+    const t0 = Date.now();
+    logger.info('[profile-perf] screen open / fetch start');
+    setIsFetchingProfile(true);
     try {
-      const res = await userService.getProfile();
-      const data = (res as any)?.data ?? res;
-      if (data) {
-        setName(data.name ?? data.fullName ?? '');
-        setMobileNumber(data.mobileNumber ?? data.phone ?? data.mobile ?? '');
-        setEmailAddress(data.emailAddress ?? data.email ?? '');
+      logger.info('[profile-perf] API start');
+      const res = await getProfile();
+      logger.info('[profile-perf] API finish', { elapsedMs: Date.now() - t0 });
+      const responseData = (res as any)?.data;
+      const data = (responseData?.user ?? responseData) as Record<string, any> | undefined;
+      if (res?.success && data) {
+        logger.info('[profile] fetch success', {
+          name: data.name ?? data.fullName,
+          email: data.email ?? data.emailAddress,
+          phoneNumber: data.phoneNumber ?? data.mobileNumber ?? data.phone,
+        });
+        applyProfileData(data, (userRef.current ?? null) as Record<string, any> | null);
+        const mergedUser = { ...(userRef.current ?? {}), ...data };
+        setUser(mergedUser);
+        logger.info('[profile] context updated from fetch', {
+          name: mergedUser.name ?? mergedUser.fullName,
+          email: mergedUser.email ?? mergedUser.emailAddress,
+          phoneNumber: mergedUser.phoneNumber ?? mergedUser.mobileNumber ?? mergedUser.phone,
+        });
+        const payload = JSON.stringify(mergedUser);
+        if (payload !== JSON.stringify(userRef.current ?? {})) {
+          await saveUserData(payload);
+          logger.info('[profile] storage updated from fetch');
+        }
+        lastFetchAtRef.current = Date.now();
+      } else if (user) {
+        applyProfileData(user as Record<string, any>, null);
       }
     } catch (error) {
       logger.error('Error fetching profile data', error);
+      if (user) {
+        applyProfileData(user as Record<string, any>, null);
+      }
     } finally {
-      setLoading(false);
+      setIsFetchingProfile(false);
+      logger.info('[profile-perf] UI render complete', { elapsedMs: Date.now() - t0 });
     }
   }, []);
 
   useRefreshOnFocus(() => {
+    if (isUpdatingProfile) {
+      return;
+    }
     void fetchProfileData();
-  }, [fetchProfileData]);
+  }, [fetchProfileData, isUpdatingProfile]);
 
   const handleUpdate = async () => {
-    setLoading(true);
+    setIsUpdatingProfile(true);
     try {
-      await api.put(endpoints.user.updateProfile, { name, emailAddress });
+      const trimmedName = name.trim();
+      const trimmedEmail = emailAddress.trim();
+      const normalizedPhone = mobileNumber.replace(/\s/g, '');
+      logger.info('[profile] update submit', {
+        payload: { name: trimmedName, email: trimmedEmail, phoneNumber: normalizedPhone },
+      });
+      const optimisticUser = {
+        ...(userRef.current ?? {}),
+        name: trimmedName || (userRef.current as Record<string, any> | null)?.name,
+        email: trimmedEmail || (userRef.current as Record<string, any> | null)?.email,
+        phoneNumber:
+          normalizedPhone ||
+          (userRef.current as Record<string, any> | null)?.phoneNumber ||
+          (userRef.current as Record<string, any> | null)?.mobileNumber,
+        mobileNumber:
+          normalizedPhone ||
+          (userRef.current as Record<string, any> | null)?.mobileNumber ||
+          (userRef.current as Record<string, any> | null)?.phoneNumber,
+        savedCheckoutContact: {
+          ...(((userRef.current as Record<string, any> | null)?.savedCheckoutContact ?? {}) as Record<string, any>),
+          fullName: trimmedName || undefined,
+          email: trimmedEmail || undefined,
+          phone: normalizedPhone || undefined,
+        },
+      };
+
+      // Optimistic update so all screens reflect edits immediately.
+      applyProfileData(optimisticUser);
+      setUser(optimisticUser);
+      logger.info('[profile] context updated optimistic', {
+        name: optimisticUser.name,
+        email: optimisticUser.email,
+        phoneNumber: optimisticUser.phoneNumber,
+      });
+      await saveUserData(JSON.stringify(optimisticUser));
+      logger.info('[profile] storage updated optimistic');
+
+      const payload = {
+        name: trimmedName,
+        email: trimmedEmail,
+        // Persist editable contact details for checkout/profile fallbacks.
+        savedCheckoutContact: {
+          fullName: trimmedName || undefined,
+          email: trimmedEmail || undefined,
+          phone: normalizedPhone || undefined,
+        },
+      };
+      const res = await updateProfile(payload);
+      if (res?.success && res.data) {
+        const responseData = res.data as Record<string, any>;
+        logger.info('[profile] update api success', {
+          name: responseData.name ?? responseData.fullName,
+          email: responseData.email ?? responseData.emailAddress,
+          phoneNumber: responseData.phoneNumber ?? responseData.mobileNumber ?? responseData.phone,
+        });
+        applyProfileData(responseData);
+        const mergedUser = {
+          ...(optimisticUser ?? {}),
+          ...responseData,
+          name: trimmedName || responseData.name || responseData.fullName,
+          email: trimmedEmail || responseData.email || responseData.emailAddress,
+          phoneNumber:
+            normalizedPhone ||
+            responseData.phoneNumber ||
+            responseData.mobileNumber ||
+            responseData.phone,
+          mobileNumber:
+            normalizedPhone ||
+            responseData.mobileNumber ||
+            responseData.phoneNumber ||
+            responseData.phone,
+        };
+        setUser(mergedUser);
+        logger.info('[profile] context updated final', {
+          name: mergedUser.name,
+          email: mergedUser.email,
+          phoneNumber: mergedUser.phoneNumber ?? mergedUser.mobileNumber,
+        });
+        await saveUserData(JSON.stringify(mergedUser));
+        logger.info('[profile] storage updated final');
+      }
       setShowSuccessModal(true);
     } catch (error) {
       logger.error('Error updating profile', error);
+      // Re-sync from server/session if API update fails after optimistic update.
+      void fetchProfileData({ force: true });
     } finally {
-      setLoading(false);
+      setIsUpdatingProfile(false);
     }
   };
 
@@ -87,7 +270,7 @@ const Profile: React.FC = () => {
               placeholderTextColor="#6B6B6B"
               value={name}
               onChangeText={setName}
-              editable={!loading}
+              editable={!isUpdatingProfile}
               textAlignVertical="center"
             />
           </View>
@@ -104,7 +287,7 @@ const Profile: React.FC = () => {
               value={mobileNumber}
               onChangeText={setMobileNumber}
               keyboardType="phone-pad"
-              editable={!loading}
+              editable={!isUpdatingProfile}
               textAlignVertical="center"
             />
           </View>
@@ -122,7 +305,7 @@ const Profile: React.FC = () => {
               onChangeText={setEmailAddress}
               keyboardType="email-address"
               autoCapitalize="none"
-              editable={!loading}
+              editable={!isUpdatingProfile}
               textAlignVertical="center"
             />
           </View>
@@ -132,27 +315,14 @@ const Profile: React.FC = () => {
 
           {/* Update Button */}
           <TouchableOpacity
-            style={[styles.updateButton, loading && styles.updateButtonDisabled]}
+            style={[styles.updateButton, isUpdatingProfile && styles.updateButtonDisabled]}
             onPress={handleUpdate}
-            disabled={loading}
+            disabled={isUpdatingProfile}
             activeOpacity={0.8}
           >
             <Text style={styles.updateButtonText}>
-              {loading ? 'Updating...' : 'Update'}
+              {isUpdatingProfile ? 'Updating...' : 'Update'}
             </Text>
-          </TouchableOpacity>
-
-          {/* Coupons & Offers Link */}
-          <TouchableOpacity
-            style={styles.offersLink}
-            onPress={() => navigation.navigate('Coupons')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.offersLinkContent}>
-              <Text style={styles.offersLinkTitle}>Coupons & Offers</Text>
-              <Text style={styles.offersLinkSubtitle}>View all available discount codes</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
           {/* Saved Addresses and Refer & Earn sections removed per requirements */}
@@ -244,35 +414,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
   },
-  offersLink: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    marginTop: 8,
-  },
-  offersLinkContent: {
-    gap: 4,
-  },
-  offersLinkTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1A1A1A',
-  },
-  offersLinkSubtitle: {
-    fontSize: 12,
-    color: '#6B6B6B',
-  },
-  chevron: {
-    fontSize: 24,
-    color: '#D1D1D1',
-    fontWeight: '300',
-  },
-
   // --- Saved Addresses ---
   savedAddressesSection: {
     gap: 12,

@@ -73,8 +73,13 @@ const DEFAULT_APP_CONFIG: AppConfigData = {
   },
   paymentMethods: [
     { key: 'cash', label: 'Cash on Delivery', description: 'Pay when your order arrives', isActive: true, order: 0 },
-    { key: 'card', label: 'Credit / Debit Card', description: 'Visa, Mastercard, RuPay', isActive: true, order: 1 },
-    { key: 'upi', label: 'UPI', description: 'Google Pay, PhonePe, Paytm', isActive: true, order: 2 },
+    {
+      key: 'digital',
+      label: 'Digital Payment',
+      description: 'Card, UPI, net banking, and wallets via Worldline',
+      isActive: true,
+      order: 1,
+    },
   ],
   support: { contactPhone: '+919999999999', contactEmail: 'support@selorg.com' },
   payment: { upiMerchantId: 'merchant@upi', upiMerchantName: 'SelOrg' },
@@ -90,7 +95,7 @@ interface AppConfigContextValue {
   isLoading: boolean;
   error: string | null;
   setAppConfig: (config: AppConfigData | null) => void;
-  refreshConfig: () => Promise<void>;
+  refreshConfig: (options?: { force?: boolean; minIntervalMs?: number; showLoading?: boolean; source?: string }) => Promise<void>;
 }
 
 const AppConfigContext = createContext<AppConfigContextValue | undefined>(undefined);
@@ -99,34 +104,79 @@ export const AppConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [appConfig, setAppConfigState] = useState<AppConfigData>(DEFAULT_APP_CONFIG);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastFetchAtRef = React.useRef<number>(0);
+  const inFlightFetchRef = React.useRef<Promise<void> | null>(null);
 
-  const fetchAppConfig = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const res = await api.get<{ success: boolean; data: AppConfigData }>(endpoints.appConfig);
-      if (res?.success && res?.data) {
-        const d = res.data;
-        const merged = {
-          ...DEFAULT_APP_CONFIG,
-          ...d,
-          checkout: { ...DEFAULT_APP_CONFIG.checkout, ...d?.checkout },
-          support: { ...DEFAULT_APP_CONFIG.support, ...d?.support },
-          payment: { ...DEFAULT_APP_CONFIG.payment, ...d?.payment },
-          images: { ...DEFAULT_APP_CONFIG.images, ...d?.images },
-        };
-        // Ensure customer app always shows/uses free delivery.
-        // (Backend pricing may still calculate fees separately; this is a UI/config override.)
-        merged.checkout.deliveryFee = 0;
-        setAppConfigState(merged);
-        setPlaceholderUrls(merged.images);
+  const fetchAppConfig = useCallback(async (options?: { force?: boolean; minIntervalMs?: number; showLoading?: boolean; source?: string }) => {
+    const minIntervalMs = options?.minIntervalMs ?? 60_000;
+    const now = Date.now();
+    if (!options?.force && lastFetchAtRef.current > 0 && now - lastFetchAtRef.current < minIntervalMs) {
+      logger.info('[app-config-perf] skip fetch (fresh cache)', {
+        source: options?.source || 'unknown',
+        elapsedMs: now - lastFetchAtRef.current,
+      });
+      return;
+    }
+
+    if (inFlightFetchRef.current) {
+      logger.info('[app-config-perf] join in-flight fetch', {
+        source: options?.source || 'unknown',
+      });
+      return inFlightFetchRef.current;
+    }
+
+    const t0 = Date.now();
+    const fetchPromise = (async () => {
+      try {
+        logger.info('[app-config-perf] fetch start', { source: options?.source || 'unknown' });
+        if (options?.showLoading !== false) {
+          setIsLoading(true);
+        }
+        setError(null);
+        const res = await api.get<{ success: boolean; data: AppConfigData }>(endpoints.appConfig);
+        if (res?.success && res?.data) {
+          const d = res.data;
+          const merged = {
+            ...DEFAULT_APP_CONFIG,
+            ...d,
+            checkout: { ...DEFAULT_APP_CONFIG.checkout, ...d?.checkout },
+            support: { ...DEFAULT_APP_CONFIG.support, ...d?.support },
+            payment: { ...DEFAULT_APP_CONFIG.payment, ...d?.payment },
+            images: { ...DEFAULT_APP_CONFIG.images, ...d?.images },
+          };
+          // Ensure customer app always shows/uses free delivery.
+          // (Backend pricing may still calculate fees separately; this is a UI/config override.)
+          merged.checkout.deliveryFee = 0;
+          setAppConfigState(merged);
+          setPlaceholderUrls(merged.images);
+          lastFetchAtRef.current = Date.now();
+          logger.info('[app-config-perf] fetch success', {
+            source: options?.source || 'unknown',
+            elapsedMs: Date.now() - t0,
+          });
+        }
+      } catch (err) {
+        logger.warn('Failed to fetch app config, using defaults', err);
+        setError(err instanceof Error ? err.message : 'Failed to load config');
+        setAppConfigState(DEFAULT_APP_CONFIG);
+      } finally {
+        if (options?.showLoading !== false) {
+          setIsLoading(false);
+        }
+        logger.info('[app-config-perf] fetch end', {
+          source: options?.source || 'unknown',
+          elapsedMs: Date.now() - t0,
+        });
       }
-    } catch (err) {
-      logger.warn('Failed to fetch app config, using defaults', err);
-      setError(err instanceof Error ? err.message : 'Failed to load config');
-      setAppConfigState(DEFAULT_APP_CONFIG);
+    })();
+
+    inFlightFetchRef.current = fetchPromise;
+    try {
+      await fetchPromise;
     } finally {
-      setIsLoading(false);
+      if (inFlightFetchRef.current === fetchPromise) {
+        inFlightFetchRef.current = null;
+      }
     }
   }, []);
 
@@ -148,7 +198,7 @@ export const AppConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   useEffect(() => {
-    fetchAppConfig();
+    void fetchAppConfig({ force: true, showLoading: true });
   }, [fetchAppConfig]);
 
   return (

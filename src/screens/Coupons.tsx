@@ -42,7 +42,7 @@ const Coupons: React.FC = () => {
   const route = useRoute();
   const { user, userKey } = useUser();
   const { location: contextLocation } = useLocation();
-  const { getTotalItems } = useCart();
+  const { cartItems, getTotalItems } = useCart();
   
   const [couponCode, setCouponCode] = useState('');
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -54,11 +54,13 @@ const Coupons: React.FC = () => {
     try {
       const res = await couponService.listCoupons({
         user_id: userKey,
+        cart_value: cartItems.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0),
         zone: contextLocation?.area || '',
+        payment_method: 'ALL',
       });
       if (res.success && res.data?.coupons) {
         const filtered = res.data.coupons
-          .filter(c => c.showInSections?.includes('COUPON_LIST'))
+          .filter(c => !c.showInSections || c.showInSections.length === 0 || c.showInSections.includes('COUPON_LIST'))
           .sort((a, b) => (a.priorityRank || 10) - (b.priorityRank || 10));
         setCoupons(filtered);
       }
@@ -67,7 +69,7 @@ const Coupons: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [userKey, contextLocation?.area]);
+  }, [userKey, contextLocation?.area, cartItems]);
 
   useRefreshOnFocus(() => {
     void fetchCouponsList();
@@ -187,9 +189,16 @@ const Coupons: React.FC = () => {
 
               <View style={styles.couponBasicInfo}>
                 <Text style={styles.couponDescription}>{coupon.description}</Text>
+                <Text style={styles.metaText}>
+                  {coupon.discountType} - {coupon.discountValue}
+                  {coupon.maxDiscountCap ? ` (max ₹${coupon.maxDiscountCap})` : ''}
+                </Text>
                 {coupon.minOrderValue > 0 && (
                   <Text style={styles.minOrderHint}>Min. order value: ₹{coupon.minOrderValue}</Text>
                 )}
+                {coupon.usageLimit ? (
+                  <Text style={styles.minOrderHint}>Usage left: {Math.max(0, coupon.usageLimit - (coupon.usageCount || 0))}</Text>
+                ) : null}
               </View>
 
               {isExpanded && (
@@ -369,6 +378,12 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: '#4C4C4C',
     lineHeight: 18,
+  },
+  metaText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#5A5A5A',
+    lineHeight: 16,
   },
   minOrderHint: {
     fontSize: 11,

@@ -1,5 +1,5 @@
-import React, { Suspense, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { Suspense, useEffect, useState } from 'react';
+import { View, StyleSheet, ActivityIndicator, InteractionManager } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import ErrorBoundary from '../components/common/ErrorBoundary';
@@ -11,9 +11,8 @@ import NoInternet from '../screens/NoInternet';
 import Login from '../screens/Login';
 import Home from '../screens/Home'; // Direct import to match MainTabNavigator
 import CategoryProducts from '../screens/CategoryProducts';
-import SettingsScreen from '../screens/SettingsScreen';
-
 // Lazy load other screens for better performance
+const SettingsScreen = React.lazy(() => import('../screens/SettingsScreen'));
 const Onboarding = React.lazy(() => import('../screens/Onboarding'));
 const OTPVerification = React.lazy(() => import('../screens/OTPVerification'));
 const VerificationSuccess = React.lazy(() => import('../screens/VerificationSuccess'));
@@ -25,7 +24,6 @@ const CustomerSupportStack = React.lazy(() => import('./CustomerSupportStack'));
 const LocationStack = React.lazy(() => import('./LocationStack'));
 const RefundsStack = React.lazy(() => import('./RefundsStack'));
 const Profile = React.lazy(() => import('../screens/Profile'));
-const PaymentManagement = React.lazy(() => import('../screens/PaymentManagement'));
 const GeneralInfoStack = React.lazy(() => import('./GeneralInfoStack'));
 const Notifications = React.lazy(() => import('../screens/Notifications'));
 const Checkout = React.lazy(() => import('../screens/Checkout'));
@@ -82,6 +80,21 @@ const createLazyScreen = (
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator: React.FC = () => {
+  useEffect(() => {
+    // Prewarm commonly opened settings routes so first open feels instant.
+    const task = InteractionManager.runAfterInteractions(() => {
+      void import('../screens/SettingsScreen');
+      void import('../screens/Profile');
+      void import('../screens/Notifications');
+      void import('./CustomerSupportStack');
+      void import('./LocationStack');
+      void import('./OrdersStack');
+      void import('./RefundsStack');
+      void import('./GeneralInfoStack');
+    });
+    return () => task.cancel();
+  }, []);
+
   return (
     <View style={styles.container}>
       <Stack.Navigator
@@ -136,13 +149,12 @@ const AppNavigator: React.FC = () => {
           options={{ gestureEnabled: false }}
         />
         <Stack.Screen name="OrderStatus" component={createLazyScreen(OrderStatusStack, 'OrderStatus')} />
-        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="Settings" component={createLazyScreen(SettingsScreen, 'Settings')} />
         <Stack.Screen name="Orders" component={createLazyScreen(OrdersStack, 'Orders')} />
         <Stack.Screen name="CustomerSupport" component={createLazyScreen(CustomerSupportStack, 'CustomerSupport')} />
         <Stack.Screen name="Addresses" component={createLazyScreen(LocationStack, 'Addresses')} />
         <Stack.Screen name="Refunds" component={createLazyScreen(RefundsStack, 'Refunds')} />
         <Stack.Screen name="Profile" component={createLazyScreen(Profile, 'Profile')} />
-        <Stack.Screen name="PaymentManagement" component={createLazyScreen(PaymentManagement, 'PaymentManagement')} />
         <Stack.Screen name="GeneralInfo" component={createLazyScreen(GeneralInfoStack, 'GeneralInfo')} />
         <Stack.Screen name="Notifications" component={createLazyScreen(Notifications, 'Notifications')} />
         <Stack.Screen name="Coupons" component={createLazyScreen(Coupons, 'Coupons')} />

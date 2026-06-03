@@ -11,6 +11,10 @@ export interface Coupon {
   discountValue: number;
   minOrderValue: number;
   maxDiscountCap?: number;
+  usageLimit?: number | null;
+  usageCount?: number;
+  usagePerUser?: number;
+  discountType?: string;
   startDate?: string;
   endDate?: string;
   validDays?: string[];
@@ -65,6 +69,9 @@ export const couponService = {
     cart_value?: number;
     zone?: string;
     payment_method?: string;
+    userId?: string;
+    cartValue?: number;
+    paymentMethod?: string;
   }): Promise<ApiResponse<{ coupons: Coupon[] }>> => {
     return api.get<{ coupons: Coupon[] }>(endpoints.coupons.list, { params });
   },

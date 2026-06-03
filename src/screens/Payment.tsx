@@ -10,27 +10,21 @@ import {
   Alert,
   Animated,
   Easing,
-  TextInput,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
-import { useRefreshAppConfigOnFocus } from '../hooks/useRefreshAppConfigOnFocus';
 import Header from '../components/layout/Header';
 import { useCart } from '@/contexts/CartContext';
 import { cancelOrder, createOrder } from '../services/orders/orderService';
 import { addressService } from '../services/address/addressService';
 import { subscribeAddressesChanged } from '../utils/addressRefresh';
-import { paymentService, type SavedCard } from '../services/payments/paymentService';
-import { api } from '../services/api/client';
-import { endpoints } from '../services/api/endpoints';
 import { logger } from '@/utils/logger';
 import { couponService } from '../services/coupons/couponService';
 import { useLocation } from '../contexts/LocationContext';
 import { useUser } from '../contexts/UserContext';
-import { useAppConfig } from '../contexts/AppConfigContext';
 import type { RootStackNavigationProp, RootStackParamList } from '../types/navigation';
 import type { RouteProp } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -46,22 +40,31 @@ import {
   type WorldlinePaymentStatus,
 } from '../services/payments/worldlineCheckout';
 
-type PaymentMethodOption = 'wallet' | 'cash' | 'card' | 'upi';
+type PaymentMethodOption = 'cash' | 'digital';
 type PaymentUiState = 'idle' | 'creating_order' | 'opening_gateway' | 'verifying' | 'paid' | 'failed' | 'pending_verification' | 'unknown' | 'error';
+
+const CHECKOUT_PAYMENT_METHODS: { id: PaymentMethodOption; label: string; description: string }[] = [
+  { id: 'cash', label: 'Cash on Delivery', description: 'Pay when your order arrives' },
+  {
+    id: 'digital',
+    label: 'Digital Payment',
+    description: 'Card, UPI, net banking, and wallets via secure Worldline gateway',
+  },
+];
 
 function resolveInitialPaymentMethod(
   value: RootStackParamList['Payment']['initialPaymentMethod'],
 ): PaymentMethodOption {
-  if (value === 'cash' || value === 'card' || value === 'upi' || value === 'wallet') {
-    return value;
+  if (value === 'cash') return 'cash';
+  if (value === 'digital' || value === 'card' || value === 'upi' || value === 'wallet') {
+    return 'digital';
   }
   return 'cash';
 }
 
-function worldlinePaymentModeForMethod(method: PaymentMethodOption): 'UPI' | 'all' | 'cards' {
-  if (method === 'upi') return 'UPI';
-  if (method === 'card') return 'all';
-  return 'cards';
+/** Maps UI method to API order payload (backend accepts digital for gateway prepayment). */
+function toOrderPaymentMethodType(method: PaymentMethodOption): 'cash' | 'digital' {
+  return method === 'digital' ? 'digital' : 'cash';
 }
 
 const Payment: React.FC = () => {
@@ -69,7 +72,6 @@ const Payment: React.FC = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'Payment'>>();
   const routeParams = route.params;
   const insets = useSafeAreaInsets();
-  const { appConfig } = useAppConfig();
   const { cartItems, clearCart, refreshCart, releaseEmptyCartLock } = useCart();
   const { location: contextLocation } = useLocation();
   const { user, userKey } = useUser();
@@ -83,14 +85,6 @@ const Payment: React.FC = () => {
   const [cancellingPayment, setCancellingPayment] = useState(false);
 
   const [addressId, setAddressId] = useState<string | null>(null);
-  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  const [loadingCards, setLoadingCards] = useState(false);
-  const [showAddCard, setShowAddCard] = useState(false);
-  const [savingCard, setSavingCard] = useState(false);
-  const [cardForm, setCardForm] = useState({ number: '', expiry: '', cvv: '', name: '' });
-  const [walletBalance, setWalletBalance] = useState(0);
-  const [walletLoading, setWalletLoading] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
 
   const placeOrderScale = useRef(new Animated.Value(1)).current;
@@ -102,55 +96,14 @@ const Payment: React.FC = () => {
   const appliedCoupon = routeParams?.appliedCoupon;
   const routeAddressId = routeParams?.addressId ?? null;
   const autoStartGateway = routeParams?.autoStartGateway === true;
+  const routeCustomerName = routeParams?.customerName ?? undefined;
+  const routeCustomerEmail = routeParams?.customerEmail ?? undefined;
+  const routeCustomerPhone = routeParams?.customerPhone ?? undefined;
   const autoStartGatewayRef = useRef(false);
   const handlePlaceOrderRef = useRef<(() => Promise<void>) | null>(null);
 
-  const useWallet = selectedMethod === 'wallet';
-  const walletDeduction = useWallet ? Math.min(walletBalance, totalBill) : 0;
-  const amountToPay = Math.max(totalBill - walletDeduction, 0);
-  const cardProcessing = paymentUiState === 'opening_gateway' && selectedMethod === 'card';
-
-  const paymentMethods: { id: PaymentMethodOption; label: string; description: string }[] = (() => {
-    const DEFAULTS: Record<PaymentMethodOption, { label: string; description: string; order: number }> = {
-      cash: { label: 'Cash on Delivery', description: 'Pay when your order arrives', order: 0 },
-      wallet: {
-        label: 'Wallet',
-        description: walletLoading ? 'Loading wallet balance...' : `Available balance: ₹${walletBalance.toFixed(0)}`,
-        order: 1,
-      },
-      card: {
-        label: 'Credit / Debit / Net Banking',
-        description: 'Opens secure Worldline payment screen',
-        order: 2,
-      },
-      upi: { label: 'UPI', description: 'Opens Worldline — GPay, PhonePe, Paytm', order: 3 },
-    };
-
-    const supported = new Set<PaymentMethodOption>(['cash', 'wallet', 'card', 'upi']);
-    const configList = (appConfig?.paymentMethods ?? []).filter((m) => supported.has(m.key as PaymentMethodOption));
-
-    // If config is absent/empty, fall back to safe defaults (includes UPI).
-    if (configList.length === 0) {
-      return (Object.keys(DEFAULTS) as PaymentMethodOption[])
-        .sort((a, b) => DEFAULTS[a].order - DEFAULTS[b].order)
-        .map((id) => ({ id, ...DEFAULTS[id] }));
-    }
-
-    // Use config ordering/labels, but keep wallet description dynamic.
-    return configList
-      .filter((m) => m.isActive !== false)
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      .map((m) => {
-        const id = m.key as PaymentMethodOption;
-        const fallback = DEFAULTS[id];
-        const label = (m.label || fallback.label).trim();
-        const description =
-          id === 'wallet'
-            ? DEFAULTS.wallet.description
-            : (m.description || fallback.description).trim();
-        return { id, label, description };
-      });
-  })();
+  const gatewayProcessing =
+    paymentUiState === 'opening_gateway' && selectedMethod === 'digital';
 
   const inFlightKey = namespacedKey(IN_FLIGHT_PAYMENT_KEY, userKey);
 
@@ -161,7 +114,7 @@ const Payment: React.FC = () => {
         const { orderId, method } = JSON.parse(stored);
         if (orderId) {
           setActiveOrderId(orderId);
-          setSelectedMethod(method);
+          setSelectedMethod(method === 'cash' ? 'cash' : 'digital');
           setPaymentUiState('verifying');
           const status = await pollWorldlineStatus(orderId, (s) => setPaymentStatus(s), 6);
           handleVerificationResult(status);
@@ -204,9 +157,6 @@ const Payment: React.FC = () => {
   };
 
 
-  // ... (saved cards and wallet state kept same for now) ...
-
-
   const fetchDefaultAddressId = useCallback(async () => {
     if (routeAddressId) {
       setAddressId(routeAddressId);
@@ -239,119 +189,6 @@ const Payment: React.FC = () => {
     });
   }, [fetchDefaultAddressId, routeAddressId]);
 
-  const fetchWallet = useCallback(async () => {
-    setWalletLoading(true);
-    try {
-      const res = await api.get<any>(endpoints.wallet.balance);
-      if (res.success && res.data) {
-        setWalletBalance(res.data.balance || 0);
-      }
-    } catch {
-      logger.warn('Failed to fetch wallet balance');
-    } finally {
-      setWalletLoading(false);
-    }
-  }, []);
-
-  const fetchSavedCards = useCallback(async () => {
-    setLoadingCards(true);
-    try {
-      const res = await paymentService.getSavedMethods();
-      if (res.success && res.data) {
-        const cards = res.data.filter((m) => m.type === 'card');
-        setSavedCards(cards);
-        const defaultCard = cards.find((c) => c.isDefault);
-        if (defaultCard) setSelectedCardId(defaultCard.id);
-      }
-    } catch {
-      logger.warn('Failed to fetch saved cards');
-    } finally {
-      setLoadingCards(false);
-    }
-  }, []);
-
-  useRefreshAppConfigOnFocus();
-
-  useRefreshOnFocus(() => {
-    void fetchWallet();
-    void fetchSavedCards();
-  }, [fetchWallet, fetchSavedCards]);
-
-
-  const formatCardNumber = (text: string) => {
-    const digits = text.replace(/\D/g, '').slice(0, 16);
-    return digits.replace(/(.{4})/g, '$1 ').trim();
-  };
-
-  const formatExpiry = (text: string) => {
-    const digits = text.replace(/\D/g, '').slice(0, 4);
-    if (digits.length > 2) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-    return digits;
-  };
-
-  const handleAddCard = async () => {
-    const num = cardForm.number.replace(/\s/g, '');
-    if (num.length < 15) {
-      Alert.alert('Invalid Card', 'Please enter a valid card number.');
-      return;
-    }
-    const [mm, yy] = cardForm.expiry.split('/');
-    if (!mm || !yy || parseInt(mm, 10) < 1 || parseInt(mm, 10) > 12) {
-      Alert.alert('Invalid Expiry', 'Please enter a valid expiry date (MM/YY).');
-      return;
-    }
-    if (cardForm.cvv.length < 3) {
-      Alert.alert('Invalid CVV', 'Please enter a valid CVV.');
-      return;
-    }
-    if (cardForm.name.trim().length < 2) {
-      Alert.alert('Invalid Name', 'Please enter the cardholder name.');
-      return;
-    }
-
-    setSavingCard(true);
-    try {
-      const res = await paymentService.addMethod({
-        type: 'card',
-        cardNumber: num,
-        expiryMonth: mm,
-        expiryYear: yy,
-        cardholderName: cardForm.name.trim(),
-      });
-      if (res.success && res.data) {
-        setSavedCards((prev) => [...prev, res.data!]);
-        setSelectedCardId(res.data.id);
-        setShowAddCard(false);
-        setCardForm({ number: '', expiry: '', cvv: '', name: '' });
-      } else {
-        Alert.alert('Error', 'Failed to save card. Please try again.');
-      }
-    } catch {
-      Alert.alert('Error', 'Failed to save card. Please try again.');
-    } finally {
-      setSavingCard(false);
-    }
-  };
-
-  const handleDeleteCard = (card: SavedCard) => {
-    Alert.alert('Remove Card', `Remove card ending in ${card.last4}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await paymentService.removeMethod(card.id);
-            setSavedCards((prev) => prev.filter((c) => c.id !== card.id));
-            if (selectedCardId === card.id) setSelectedCardId(null);
-          } catch {
-            Alert.alert('Error', 'Failed to remove card.');
-          }
-        },
-      },
-    ]);
-  };
-
   const handlePlaceOrder = async () => {
     if (paymentUiState !== 'idle' && paymentUiState !== 'failed' && paymentUiState !== 'error') return;
 
@@ -376,22 +213,19 @@ const Payment: React.FC = () => {
         return;
       }
 
-      let paymentMethodId = '';
-      if (selectedMethod === 'card') {
-        paymentMethodId = selectedCardId || 'card_app';
-      } else if (selectedMethod === 'upi') {
-        paymentMethodId = 'upi_worldline';
-      } else if (selectedMethod === 'wallet') {
-        paymentMethodId = 'wallet';
-      }
+      const orderPaymentType = toOrderPaymentMethodType(selectedMethod);
+      const paymentMethodId = orderPaymentType === 'digital' ? 'worldline_digital' : '';
 
       const response = await createOrder({
         items: orderItems,
         addressId: resolvedAddressId,
         paymentMethodId,
-        paymentMethodType: selectedMethod,
+        paymentMethodType: orderPaymentType,
         couponCode: appliedCoupon?.code,
         deliveryTip,
+        customerName: routeCustomerName,
+        customerEmail: routeCustomerEmail,
+        customerPhone: routeCustomerPhone,
       });
 
       if (!response.success || !response.data) {
@@ -405,34 +239,26 @@ const Payment: React.FC = () => {
       // Order lines are saved server-side; cart belongs to this order, not the next one.
       await clearCart();
 
-      // 1. Cash or Wallet (no Worldline gateway)
-      if (selectedMethod === 'cash' || selectedMethod === 'wallet') {
+      // 1. Cash on delivery — no Worldline gateway
+      if (selectedMethod === 'cash') {
         await finalizeOrder(orderId);
         return;
       }
 
-      // 2. Card / Net banking / UPI — Worldline Paynimo SDK screen
-      if (selectedMethod !== 'card' && selectedMethod !== 'upi') {
-        throw new Error('Unsupported payment method');
-      }
-
+      // 2. Digital payment — Worldline Paynimo SDK (all methods: cards, UPI, net banking, wallets)
       setPaymentUiState('opening_gateway');
-      const paymentMode = worldlinePaymentModeForMethod(selectedMethod);
-      logger.info('Creating Worldline session', {
-        orderId,
-        paymentMode,
-      });
+      logger.info('Creating Worldline session', { orderId, paymentMode: 'all' });
 
       const session = await createWorldlineSession({
         orderId,
-        consumerEmailId: user?.email,
-        consumerMobileNo: user?.phoneNumber,
-        paymentMode,
+        consumerEmailId: routeCustomerEmail || user?.email,
+        consumerMobileNo: routeCustomerPhone || user?.phoneNumber,
+        paymentMode: 'all',
       });
 
       logger.info('Opening Worldline gateway', {
         txnId: session.txnId,
-        paymentMode: selectedMethod,
+        paymentMode: 'digital',
         hashAlgo: session.hashAlgo,
       });
       
@@ -497,7 +323,7 @@ const Payment: React.FC = () => {
   useEffect(() => {
     if (!autoStartGateway) return;
     if (autoStartGatewayRef.current) return;
-    if (selectedMethod !== 'card' && selectedMethod !== 'upi') return;
+    if (selectedMethod !== 'digital') return;
     if (!addressId && !routeAddressId) return;
     if (paymentUiState !== 'idle') return;
 
@@ -510,8 +336,8 @@ const Payment: React.FC = () => {
 
   const finalizeOrder = async (orderId: string) => {
     try {
-      // Coupon redemption for card/UPI runs on backend after payment (releaseOrderFulfillment)
-      if (appliedCoupon && selectedMethod !== 'card' && selectedMethod !== 'upi') {
+      // Coupon redemption for digital payment runs on backend after payment (releaseOrderFulfillment)
+      if (appliedCoupon && selectedMethod !== 'digital') {
         await couponService.redeemCoupon({
           coupon_code: appliedCoupon.code,
           user_id: userKey,
@@ -527,13 +353,6 @@ const Payment: React.FC = () => {
           zone: contextLocation?.area || '',
           delivery_fee: 0
         }).catch(err => logger.warn('Coupon redemption failed (non-blocking)', err));
-      }
-
-      if (walletDeduction > 0) {
-        await api.post(endpoints.wallet.debit, {
-          amount: walletDeduction,
-          orderId,
-        }).catch(err => logger.warn('Wallet debit failed (non-blocking)', err));
       }
 
       await clearCart();
@@ -680,7 +499,7 @@ const Payment: React.FC = () => {
     return <StandalonePaymentFlow standalone={standaloneSession} navigation={navigation} />;
   }
 
-  if (cardProcessing) {
+  if (gatewayProcessing) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -690,7 +509,7 @@ const Payment: React.FC = () => {
           </View>
           <Text style={styles.processingTitle}>Processing Payment</Text>
           <Text style={styles.processingSubtitle}>
-            Please wait while we securely process your card payment...
+            Please wait while we open the secure Worldline payment gateway...
           </Text>
           <Text style={styles.processingNote}>Do not close or go back</Text>
         </View>
@@ -713,71 +532,6 @@ const Payment: React.FC = () => {
       </SafeAreaView>
     );
   }
-
-  const renderCardWorldlineInfo = () => {
-    if (selectedMethod !== 'card') return null;
-
-    return (
-      <View style={styles.expandedSection}>
-        <View style={styles.upiInfoBox}>
-          <Text style={styles.upiInfoText}>
-            Tap Place Order to open the secure Worldline screen. Pay with credit/debit card or internet
-            banking there — card details are not entered in this app.
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  const renderWalletDetails = () => {
-    if (selectedMethod !== 'wallet') return null;
-
-    return (
-      <View style={styles.expandedSection}>
-        <View style={styles.walletDetailRow}>
-          <Text style={styles.walletDetailLabel}>Order total</Text>
-          <Text style={styles.walletDetailValue}>₹{totalBill.toFixed(0)}</Text>
-        </View>
-        <View style={styles.walletDetailRow}>
-          <Text style={styles.walletDetailLabel}>Wallet deduction</Text>
-          <Text style={[styles.walletDetailValue, { color: '#3F723F' }]}>-₹{walletDeduction.toFixed(0)}</Text>
-        </View>
-        {amountToPay > 0 ? (
-          <>
-            <View style={styles.walletDivider} />
-            <View style={styles.walletDetailRow}>
-              <Text style={[styles.walletDetailLabel, { fontWeight: '600' }]}>Remaining to pay</Text>
-              <Text style={[styles.walletDetailValue, { fontWeight: '700' }]}>₹{amountToPay.toFixed(0)}</Text>
-            </View>
-            <Text style={styles.walletPartialNote}>
-              Remaining ₹{amountToPay.toFixed(0)} will be collected as Cash on Delivery
-            </Text>
-          </>
-        ) : (
-          <>
-            <View style={styles.walletDivider} />
-            <View style={styles.walletFullCoverBadge}>
-              <Text style={styles.walletFullCoverBadgeText}>✓ Wallet covers the full amount</Text>
-            </View>
-          </>
-        )}
-      </View>
-    );
-  };
-
-  const renderUpiDetails = () => {
-    if (selectedMethod !== 'upi') return null;
-
-    return (
-      <View style={styles.expandedSection}>
-        <View style={styles.upiInfoBox}>
-          <Text style={styles.upiInfoText}>
-            You will be redirected to the secure Worldline payment gateway to complete your UPI transaction using any UPI app.
-          </Text>
-        </View>
-      </View>
-    );
-  };
 
   const renderStatusOverlay = () => {
     if (paymentUiState === 'idle' || paymentUiState === 'paid') return null;
@@ -886,7 +640,7 @@ const Payment: React.FC = () => {
             <Text style={styles.sectionTitle}>Select Payment Method</Text>
           </View>
 
-          {paymentMethods.map((method) => {
+          {CHECKOUT_PAYMENT_METHODS.map((method) => {
             const isSelected = selectedMethod === method.id;
             return (
               <View
@@ -916,10 +670,6 @@ const Payment: React.FC = () => {
                     </View>
                   </View>
                 </TouchableOpacity>
-
-                {method.id === 'wallet' && isSelected && renderWalletDetails()}
-                {method.id === 'card' && isSelected && renderCardWorldlineInfo()}
-                {method.id === 'upi' && isSelected && renderUpiDetails()}
               </View>
             );
           })}
@@ -928,15 +678,9 @@ const Payment: React.FC = () => {
           <View style={styles.infoCard}>
             <Text style={styles.infoIcon}>🔒</Text>
             <Text style={styles.infoText}>
-              {selectedMethod === 'wallet' && amountToPay === 0
-                ? 'Full amount will be paid from your SelOrg Wallet.'
-                : selectedMethod === 'wallet'
-                ? `₹${walletDeduction.toFixed(0)} from wallet, ₹${amountToPay.toFixed(0)} as cash on delivery.`
-                : selectedMethod === 'cash'
+              {selectedMethod === 'cash'
                 ? 'You will pay the delivery partner in cash when your order arrives.'
-                : selectedMethod === 'card' || selectedMethod === 'upi'
-                ? 'You will be redirected to the Worldline payment gateway to complete payment.'
-                : 'Your payment will be processed securely. Amount will be charged upon order confirmation.'}
+                : 'You will be redirected to the Worldline payment gateway to complete payment.'}
             </Text>
           </View>
         </ScrollView>
@@ -950,10 +694,8 @@ const Payment: React.FC = () => {
             const buttonDisabled = isDisabled;
 
             let buttonLabel = `Place Order  •  ₹${totalBill.toFixed(0)}`;
-            if (selectedMethod === 'card' || selectedMethod === 'upi') {
+            if (selectedMethod === 'digital') {
               buttonLabel = `Pay via Worldline  •  ₹${totalBill.toFixed(0)}`;
-            } else if (useWallet && walletDeduction > 0) {
-              buttonLabel += ` (₹${walletDeduction.toFixed(0)} wallet)`;
             }
 
             return (
@@ -1344,243 +1086,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  savedCardItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    marginBottom: 8,
-    backgroundColor: '#F5F5F5',
-  },
-  savedCardItemSelected: {
-    borderColor: '#034703',
-    backgroundColor: 'rgba(3, 71, 3, 0.02)',
-  },
-  savedCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  cardRadio: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: '#D1D1D1',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cardRadioSelected: {
-    borderColor: '#034703',
-  },
-  cardRadioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#034703',
-  },
-  savedCardInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  savedCardBrand: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1A1A1A',
-    lineHeight: 20,
-  },
-  savedCardNumber: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#4C4C4C',
-    lineHeight: 18,
-    letterSpacing: 1,
-    fontVariant: ['tabular-nums'],
-  },
-  savedCardHolder: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#6B6B6B',
-    lineHeight: 18,
-  },
-  savedCardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  cardActionBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FEF2F2',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cardActionDelete: {
-    fontSize: 12,
-    color: '#D7263D',
-    fontWeight: '700',
-  },
-
-  addCardButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#034703',
-    borderStyle: 'dashed',
-    marginTop: 4,
-  },
-  addCardPlus: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#034703',
-  },
-  addCardText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#034703',
-    lineHeight: 18,
-  },
-  addCardForm: {
-    marginTop: 8,
-    gap: 12,
-  },
-  addCardFormTitle: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: '#1A1A1A',
-    lineHeight: 20,
-    marginBottom: 2,
-  },
-  inputGroup: {
-    gap: 4,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#1A1A1A',
-    lineHeight: 18,
-  },
-  textInput: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 3.5,
-    borderWidth: 1,
-    borderColor: '#D4D4D4',
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#1A1A1A',
-    lineHeight: 18,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  formActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 4,
-  },
-  formCancelBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#D1D1D1',
-    alignItems: 'center',
-  },
-  formCancelText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B6B6B',
-    lineHeight: 20,
-  },
-  formSaveBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: '#034703',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  formSaveBtnDisabled: {
-    opacity: 0.6,
-  },
-  formSaveText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#FFFFFF',
-    lineHeight: 20,
-  },
-
-  upiInfoBox: {
-    marginTop: 12,
-    backgroundColor: '#F0FDF4',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-  },
-  upiInfoText: {
-    fontSize: 12,
-    color: '#166534',
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-
-  walletDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  walletDetailLabel: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#6B6B6B',
-    lineHeight: 18,
-  },
-  walletDetailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1A1A1A',
-    lineHeight: 20,
-  },
-  walletDivider: {
-    height: 1,
-    backgroundColor: '#D1D1D1',
-    marginVertical: 8,
-  },
-  walletPartialNote: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#6B6B6B',
-    lineHeight: 18,
-    marginTop: 6,
-  },
-  walletFullCoverBadge: {
-    backgroundColor: '#E0F2F1',
-    borderRadius: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-  },
-  walletFullCoverBadgeText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#034703',
-    lineHeight: 18,
-  },
 });
 
 export default Payment;

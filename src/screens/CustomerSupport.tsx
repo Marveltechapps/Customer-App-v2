@@ -42,7 +42,7 @@ const CustomerSupport: React.FC = () => {
     : FALLBACK_HELP_ITEMS);
   const [loading, setLoading] = useState(false);
 
-  useRefreshAppConfigOnFocus();
+  useRefreshAppConfigOnFocus('CustomerSupport');
 
   const handleHelpItemPress = (item: string) => {
     // Contact Support opens ticket form (match label from config or fallback)
@@ -107,6 +107,18 @@ const CustomerSupport: React.FC = () => {
               <Text style={styles.sectionTitle}>Support</Text>
             </View>
             <SupportCard onChatPress={handleChatPress} />
+            <TouchableOpacity
+              style={styles.callSupportItem}
+              onPress={() => navigation.navigate('MySupportTickets')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.callSupportContent}>
+                <View style={styles.callIconContainer}>
+                  <Text style={styles.ticketIcon}>🎫</Text>
+                </View>
+                <Text style={styles.callSupportText}>My tickets</Text>
+              </View>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.callSupportItem} onPress={handleCallSupport} activeOpacity={0.7}>
               <View style={styles.callSupportContent}>
                 <View style={styles.callIconContainer}>
@@ -176,6 +188,9 @@ const styles = StyleSheet.create({
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  ticketIcon: {
+    fontSize: 18,
   },
   callSupportText: {
     fontSize: 14,
