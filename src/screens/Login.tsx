@@ -1,64 +1,103 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+/**
+ * Login Screen — Mobile / Email / WhatsApp tabs (Picker-style UI, Customer green theme)
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
+  TextInput,
+  KeyboardAvoidingView,
+  Keyboard,
+  Pressable,
+  Platform,
+  useWindowDimensions,
   ScrollView,
   StatusBar,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  Animated,
-  Easing,
-  Linking,
-  Image,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackRouteProp } from '../types/navigation';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import LoginWelcomeSection from '@/components/auth/LoginWelcomeSection';
+import LoginMethodTabs from '@/components/auth/LoginMethodTabs';
+import PhoneInputRow from '@/components/auth/PhoneInputRow';
+import ConsentCheckbox from '@/components/auth/ConsentCheckbox';
+import CountryPickerModal from '@/components/auth/CountryPickerModal';
+import PolicyModal from '@/components/auth/PolicyModal';
+import Button from '@/components/common/Button';
+import { useAuthScreenTheme } from '@/hooks/useAuthScreenTheme';
+import {
+  COUNTRY_LIST,
+  DEFAULT_COUNTRY_CODE,
+  findCountryByCode,
+  findCountryByDialCode,
+  type CountryOption,
+} from '@/lib/countries';
+import {
+  formatNationalAsYouType,
+  stripDigits,
+  truncatePhoneForCountry,
+  validatePhone,
+} from '@/lib/phoneValidation';
+import {
+  sendLoginOtp,
+  validateEmailFormat,
+  isCompleteEmail,
+  type LoginMode,
+} from '@/services/auth/authService';
+import { tokenManager } from '@/services/api/tokenManager';
+import { savePendingOtpSession } from '@/utils/pendingOtpSession';
+import { isLoginAuthorizedFromSplash, navigateToLoginScreen } from '@/utils/navigationRef';
+import type { RootStackRouteProp } from '@/types/navigation';
+import { Colors } from '@/constants/Colors';
+import { APP_LAUNCH_ID } from '@/constants/appLaunch';
 
-const selorgLogo = require('../../assets/selorg-logo.png');
-import { sendOtp } from '../services/auth/authService';
-import { tokenManager } from '../services/api/tokenManager';
-import { getLegalConfig } from '../services/legal/legalService';
-import type { LoginLegalConfig } from '../services/legal/legalService';
-import CountryFlagIcon from '../assets/images/country-flag-icon.svg';
-import { useDimensions, scale, scaleFont, getSpacing, getBorderRadius, wp } from '../utils/responsive';
-import { logger } from '@/utils/logger';
-import { isLoginAuthorizedFromSplash, navigateToLoginScreen } from '../utils/navigationRef';
-import { getApiErrorMessage } from '../services/api/types';
-import { useAppConfig } from '../contexts/AppConfigContext';
-
-const DEFAULT_PHONE_NUMBER = '';
+function parseLoginMode(value: unknown): LoginMode | null {
+  if (value === 'email' || value === 'whatsapp' || value === 'mobile') return value;
+  return null;
+}
 
 interface LoginScreenProps {
   onLoginSuccess?: (phoneNumber: string) => void;
 }
 
-/**
- * Login Screen Component
- * Recreated from Figma design
- * Displays login form with mobile number input
- */
 const Login: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const route = useRoute<RootStackRouteProp<'Login'>>();
-  const { width } = useDimensions();
-  const [readyToShow, setReadyToShow] = useState(false);
-  const insets = useSafeAreaInsets();
-  const { appConfig } = useAppConfig();
-  const defaultCountryCode = appConfig.branding?.countryCode ?? '+91';
-  const [phoneNumber, setPhoneNumber] = useState<string>(DEFAULT_PHONE_NUMBER);
-  const [countryCode, setCountryCode] = useState<string>(defaultCountryCode);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
-  const [loginLegal, setLoginLegal] = useState<LoginLegalConfig | null>(null);
+  const theme = useAuthScreenTheme();
+  const { width: screenWidth } = useWindowDimensions();
 
-  // Auth guard: valid session → home; otherwise require Splash → Login for this app launch
+  const routeParams = route.params ?? {};
+  const initialMode = parseLoginMode((routeParams as { loginMode?: LoginMode }).loginMode) ?? 'mobile';
+  const initialEmail = String((routeParams as { email?: string }).email ?? '');
+  const initialPhone = stripDigits(String((routeParams as { phone?: string }).phone ?? ''));
+  const initialCountry =
+    findCountryByDialCode(String((routeParams as { countryCode?: string }).countryCode ?? '')) ??
+    findCountryByCode(DEFAULT_COUNTRY_CODE) ??
+    COUNTRY_LIST[0];
+
+  const [readyToShow, setReadyToShow] = useState(false);
+  const [loginMode, setLoginMode] = useState<LoginMode>(initialMode);
+  const [country, setCountry] = useState<CountryOption>(initialCountry);
+  const [phoneDigits, setPhoneDigits] = useState(initialPhone);
+  const [email, setEmail] = useState(initialEmail);
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [phoneFocused, setPhoneFocused] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [countryPickerVisible, setCountryPickerVisible] = useState(false);
+  const [policyModal, setPolicyModal] = useState<'terms' | 'privacy' | null>(null);
+  const emailInputRef = useRef<TextInput>(null);
+  const phoneInputRef = useRef<TextInput>(null);
+
+  const dismissKeyboard = useCallback(() => {
+    emailInputRef.current?.blur();
+    phoneInputRef.current?.blur();
+    Keyboard.dismiss();
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const check = async () => {
@@ -70,7 +109,7 @@ const Login: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           return;
         }
       } catch {
-        // ignore init errors; still enforce splash-first below
+        /* ignore */
       }
       if (!mounted) return;
       if (!isLoginAuthorizedFromSplash(route.params?.fromSplash)) {
@@ -80,744 +119,417 @@ const Login: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       setReadyToShow(true);
     };
     check();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [navigation, route.params?.fromSplash]);
 
-  useRefreshOnFocus(() => {
-    void getLegalConfig()
-      .then((res) => {
-        if (res.success && res.data?.loginLegal) setLoginLegal(res.data.loginLegal);
-      })
-      .catch((err) => logger.warn('Legal config failed', { message: getApiErrorMessage(err, 'Failed to load legal config') }));
-  }, []);
-
-  // Responsive styles memoized
-  const responsiveStyles = useMemo(() => ({
-    headerSection: {
-      paddingVertical: getSpacing(24),
-      paddingHorizontal: getSpacing(16),
-    },
-    headerContent: {
-      gap: getSpacing(12),
-      paddingVertical: getSpacing(4),
-    },
-    logoContainer: {
-      width: scale(56),
-      height: scale(56),
-      borderRadius: scale(28),
-    },
-    titleContainer: {
-      paddingHorizontal: wp(14.13), // Responsive instead of 53px
-    },
-    title: {
-      fontSize: scaleFont(32, 28, 36),
-      lineHeight: scaleFont(38.4, 34, 42),
-    },
-    subtitleContainer: {
-      paddingHorizontal: wp(15.73), // Responsive instead of 59px
-    },
-    subtitle: {
-      fontSize: scaleFont(14, 12, 16),
-      lineHeight: scaleFont(21, 18, 24),
-    },
-    contentSection: {
-      paddingTop: getSpacing(20),
-      paddingBottom: getSpacing(20),
-      paddingHorizontal: getSpacing(16),
-      gap: getSpacing(24),
-    },
-    sectionHeader: {
-      gap: getSpacing(8),
-      height: scale(55.3),
-    },
-    sectionTitle: {
-      fontSize: scaleFont(22, 20, 24),
-      lineHeight: scaleFont(30.8, 28, 34),
-    },
-    sectionSubtitle: {
-      fontSize: scaleFont(12.25, 11, 14),
-      lineHeight: scaleFont(17.5, 16, 20),
-    },
-    inputWrapper: {
-      paddingVertical: 0, // Remove extra vertical padding for perfect centering
-      paddingHorizontal: getSpacing(14),
-      height: scale(54), // Fixed height so text is always centered
-      minHeight: scale(54),
-      borderRadius: scale(12),
-    },
-    countryCodeContainer: {
-      width: scale(42.41),
-    },
-    countryCodeText: {
-      fontSize: scaleFont(12.25, 11, 14),
-      lineHeight: scaleFont(17.5, 16, 20),
-    },
-    phoneInput: {
-      fontSize: scaleFont(14, 13, 15), // Reduced size for placeholder and entered number
-      lineHeight: scaleFont(18, 17, 19), // Adjusted lineHeight for smaller font
-    },
-    noteText: {
-      fontSize: scaleFont(12, 11, 14),
-      lineHeight: scaleFont(16, 14, 18),
-    },
-    errorText: {
-      fontSize: scaleFont(12, 11, 14),
-      lineHeight: scaleFont(16, 14, 18),
-      marginTop: getSpacing(4),
-    },
-    actionSection: {
-      paddingTop: getSpacing(24),
-      paddingHorizontal: getSpacing(16),
-      gap: getSpacing(14),
-      // paddingBottom will be set dynamically with safe area insets
-    },
-    sendOTPButton: {
-      paddingVertical: getSpacing(13),
-      paddingHorizontal: wp(36.27), // Responsive instead of 136px
-      borderRadius: scale(8),
-    },
-    sendOTPButtonText: {
-      fontSize: scaleFont(14, 12, 16),
-      lineHeight: scaleFont(22.4, 20, 24),
-    },
-    termsContainer: {
-      paddingHorizontal: wp(5.07), // Responsive instead of 19px
-    },
-    termsText: {
-      fontSize: scaleFont(12, 11, 14),
-      lineHeight: scaleFont(16, 14, 18),
-      width: wp(80.27), // Responsive instead of 301px
-    },
-  }), [width]);
-
-  // Animation values for header fade-in
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const logoScale = useRef(new Animated.Value(0.95)).current;
-  const titleOpacity = useRef(new Animated.Value(0)).current;
-  const titleTranslateY = useRef(new Animated.Value(10)).current;
-  const subtitleOpacity = useRef(new Animated.Value(0)).current;
-  const subtitleTranslateY = useRef(new Animated.Value(10)).current;
-
-  // Animation values for input focus
-  const inputScale = useRef(new Animated.Value(1)).current;
-  const inputBorderColor = useRef(new Animated.Value(0)).current;
-
-  // Animation values for error message
-  const errorOpacity = useRef(new Animated.Value(0)).current;
-  const errorTranslateY = useRef(new Animated.Value(-20)).current;
-
-  // Header fade-in animation on mount
   useEffect(() => {
-    // Logo animation
-    Animated.parallel([
-      Animated.timing(logoOpacity, {
-        toValue: 1,
-        duration: 500,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(logoScale, {
-        toValue: 1,
-        duration: 500,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
+    dismissKeyboard();
+  }, [dismissKeyboard]);
 
-    // Title animation - starts after logo (100ms delay)
-    Animated.parallel([
-      Animated.timing(titleOpacity, {
-        toValue: 1,
-        duration: 400,
-        delay: 100,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(titleTranslateY, {
-        toValue: 0,
-        duration: 400,
-        delay: 100,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Subtitle animation - starts after title (200ms delay)
-    Animated.parallel([
-      Animated.timing(subtitleOpacity, {
-        toValue: 1,
-        duration: 400,
-        delay: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(subtitleTranslateY, {
-        toValue: 0,
-        duration: 400,
-        delay: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-
-  // Input focus animation
   useEffect(() => {
-    // Don't animate if there's an error (error state takes priority)
-    if (error) {
-      inputBorderColor.setValue(0); // Reset to default when error appears
-      return;
+    const params = route.params as {
+      loginMode?: LoginMode;
+      email?: string;
+      phone?: string;
+      countryCode?: string;
+    };
+    const mode = parseLoginMode(params?.loginMode);
+    if (mode) setLoginMode(mode);
+    if (params?.email) setEmail(params.email);
+    const paramPhone = stripDigits(params?.phone ?? '');
+    if (paramPhone) setPhoneDigits(paramPhone);
+    if (params?.countryCode) {
+      const nextCountry = findCountryByDialCode(params.countryCode);
+      if (nextCountry) setCountry(nextCountry);
     }
-
-    Animated.parallel([
-      Animated.timing(inputScale, {
-        toValue: isInputFocused ? 1.01 : 1,
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(inputBorderColor, {
-        toValue: isInputFocused ? 1 : 0,
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false, // Color animation requires false
-      }),
-    ]).start();
-  }, [isInputFocused, error]);
-
-  // Error message animation
-  useEffect(() => {
-    if (error) {
-      // Slide down and fade in
-      Animated.parallel([
-        Animated.timing(errorOpacity, {
-          toValue: 1,
-          duration: 300,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(errorTranslateY, {
-          toValue: 0,
-          duration: 300,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      // Reset when error is cleared
-      errorOpacity.setValue(0);
-      errorTranslateY.setValue(-20);
+    if (mode || params?.email || params?.phone || params?.countryCode) {
+      setFieldError(null);
     }
-  }, [error]);
+  }, [route.params]);
 
-  // Placeholder function for API integration
+  const contentWidth = useMemo(
+    () => Math.min(Math.max(screenWidth - 32, 320), 420),
+    [screenWidth]
+  );
+
+  const formattedPhone = useMemo(
+    () => formatNationalAsYouType(phoneDigits, country.code),
+    [phoneDigits, country.code]
+  );
+
+  const phoneValidation = useMemo(() => {
+    if (loginMode === 'email') return null;
+    return validatePhone(
+      phoneDigits,
+      country.code,
+      loginMode === 'whatsapp' ? 'whatsapp' : 'mobile'
+    );
+  }, [loginMode, phoneDigits, country.code]);
+
+  const emailValid = useMemo(() => isCompleteEmail(email), [email]);
+
+  const canSendOtp = useMemo(() => {
+    if (loading || !consentChecked) return false;
+    if (loginMode === 'email') return emailValid;
+    return !!phoneDigits && (phoneValidation?.valid ?? false);
+  }, [loading, consentChecked, loginMode, emailValid, phoneDigits, phoneValidation]);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          flex: 1,
+          backgroundColor: theme.colors.pageBg,
+          position: 'relative',
+        },
+        cardShadow: {
+          width: contentWidth,
+          alignSelf: 'center',
+          borderRadius: 20,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.14,
+          shadowRadius: 16,
+          elevation: 10,
+        },
+        centeredBlock: {
+          width: contentWidth,
+          alignSelf: 'center',
+        },
+        formCard: {
+          backgroundColor: theme.colors.surface,
+          borderRadius: 20,
+          overflow: 'hidden',
+        },
+        formBody: {
+          paddingHorizontal: 20,
+          paddingTop: 20,
+          paddingBottom: 24,
+        },
+        scroll: { flex: 1 },
+        scrollContent: {
+          flexGrow: 1,
+          justifyContent: 'center',
+          paddingHorizontal: theme.layout.contentPaddingH,
+          paddingTop: theme.spacing.sm,
+          paddingBottom: theme.spacing.xxl + 24,
+        },
+        methodLabel: {
+          fontSize: theme.typography.fontSize.md,
+          color: theme.colors.mutedText,
+          marginBottom: theme.spacing.sm,
+        },
+        fieldSection: {
+          marginTop: 20,
+          marginBottom: 20,
+        },
+        fieldLabel: {
+          fontSize: theme.typography.fontSize.md,
+          color: theme.colors.textPrimary,
+          marginBottom: theme.spacing.sm,
+          fontWeight: theme.typography.fontWeight.bold,
+        },
+        emailInput: {
+          borderWidth: 1,
+          borderColor: '#B8D4BA',
+          borderRadius: 12,
+          paddingHorizontal: theme.spacing.md,
+          paddingVertical: theme.spacing.md + 2,
+          fontSize: theme.typography.fontSize.lg,
+          color: theme.colors.textPrimary,
+          backgroundColor: theme.colors.inputBg,
+        },
+        inputFocus: {
+          borderColor: theme.colors.inputFocus,
+          borderWidth: 1.5,
+        },
+        inputError: {
+          borderColor: theme.colors.inputBorderError,
+          borderWidth: 1.5,
+        },
+        errorText: {
+          marginTop: theme.spacing.sm,
+          fontSize: theme.typography.fontSize.sm,
+          color: theme.colors.inputBorderError,
+        },
+        consentSection: {
+          marginBottom: 20,
+        },
+        buttonContainer: {
+          marginBottom: 4,
+        },
+      }),
+    [theme, contentWidth]
+  );
+
+  const handleLoginModeChange = (mode: LoginMode) => {
+    dismissKeyboard();
+    setLoginMode(mode);
+    setFieldError(null);
+  };
+
+  const handlePhoneChange = (text: string) => {
+    const digits = truncatePhoneForCountry(stripDigits(text), country.code);
+    setPhoneDigits(digits);
+    if (fieldError) setFieldError(null);
+    const validation = validatePhone(
+      digits,
+      country.code,
+      loginMode === 'whatsapp' ? 'whatsapp' : 'mobile'
+    );
+    if (validation.valid) {
+      phoneInputRef.current?.blur();
+      Keyboard.dismiss();
+    }
+  };
+
+  const handleCountrySelect = (next: CountryOption) => {
+    dismissKeyboard();
+    setCountry(next);
+    setPhoneDigits((prev) => truncatePhoneForCountry(prev, next.code));
+    setFieldError(null);
+  };
+
+  const handleEmailChange = (text: string) => {
+    const cleaned = text.replace(/\s/g, '');
+    setEmail(cleaned);
+    if (fieldError) setFieldError(null);
+  };
+
   const handleSendOTP = async () => {
+    if (!consentChecked) return;
+
+    if (loginMode === 'email') {
+      const trimmed = email.trim();
+      if (!trimmed) {
+        setFieldError('Enter email address');
+        return;
+      }
+      if (!validateEmailFormat(trimmed)) {
+        setFieldError('Please enter a valid email address');
+        return;
+      }
+      if (!isCompleteEmail(trimmed)) {
+        setFieldError('Please enter a complete email address');
+        return;
+      }
+    } else {
+      if (!phoneDigits) {
+        setFieldError(
+          loginMode === 'whatsapp' ? 'Enter WhatsApp number' : 'Enter mobile number'
+        );
+        return;
+      }
+      if (!phoneValidation?.valid) {
+        setFieldError(phoneValidation?.message ?? 'Invalid number format');
+        return;
+      }
+    }
+
+    dismissKeyboard();
     setLoading(true);
-    setError(null);
+    setFieldError(null);
 
     try {
-      const fullPhone = `${countryCode}${phoneNumber}`.replace(/\s+/g, '');
-      logger.info('Sending OTP', { phoneNumber: fullPhone });
+      const resp = await sendLoginOtp({
+        loginMode,
+        countryCode: country.dialCode,
+        phone: phoneDigits,
+        email: email.trim().toLowerCase(),
+      });
 
-      const resp = await sendOtp(fullPhone);
-      // Debug: print full response to Metro/Xcode logs for troubleshooting
+      const sessionId = resp?.sessionId;
+      if (!sessionId) {
+        setFieldError('Failed to send OTP. Please try again.');
+        return;
+      }
+
+      const otpTarget = loginMode === 'email' ? 'email' : 'phone';
+      const normalizedEmail = email.trim().toLowerCase();
+      const displayTarget =
+        loginMode === 'email' ? normalizedEmail : `${country.dialCode} ${phoneDigits}`;
+      const channel =
+        resp.channel ?? (loginMode === 'whatsapp' ? 'whatsapp' : loginMode === 'email' ? 'email' : 'sms');
+
+      const otpSession = {
+        loginMode,
+        otpTarget,
+        countryCode: country.dialCode,
+        phone: phoneDigits,
+        email: normalizedEmail,
+        channel,
+        displayTarget,
+        sessionId,
+      };
+
       try {
-        // eslint-disable-next-line no-console
-        console.debug('[Login] sendOtp response:', resp);
-      } catch (e) {
-        // ignore
+        await savePendingOtpSession(otpSession);
+      } catch {
+        /* route params carry session */
       }
 
-      // Defensive handling: backend may return sessionId at top-level or inside data.
-      // ApiResponse shape: { success, data?, message?, ... } OR legacy { sessionId, ... }
-      const topLevelSessionId = (resp as any)?.sessionId;
-      const dataSessionId = (resp as any)?.data?.sessionId;
-      const sessionId = topLevelSessionId || dataSessionId || null;
+      navigation.navigate('OTPVerification', {
+        sessionId,
+        displayTarget,
+        loginMode,
+        otpTarget,
+        countryCode: country.dialCode,
+        phone: phoneDigits,
+        email: normalizedEmail,
+        channel,
+        phoneNumber: displayTarget,
+        fromSplash: route.params?.fromSplash ?? APP_LAUNCH_ID,
+      });
 
-      // If API explicitly failed, show message
-      if (resp && (resp as any).success === false) {
-        const msg = (resp as any).message || (resp as any).error || 'Failed to send OTP';
-        logger.warn('sendOtp responded with success=false', { phoneNumber: fullPhone, resp });
-        setError(msg);
-        return;
+      if (onLoginSuccess && loginMode !== 'email') {
+        onLoginSuccess(`${country.dialCode}${phoneDigits}`.replace(/\s+/g, ''));
       }
-
-      if (sessionId) {
-        // Navigate to OTP verification screen and pass sessionId (if backend returns it)
-        navigation.navigate('OTPVerification', {
-          phoneNumber: `${countryCode} ${phoneNumber}`,
-          sessionId,
-        } as never);
-
-        // Call onLoginSuccess if provided (for backward compatibility)
-        if (onLoginSuccess) {
-          onLoginSuccess(fullPhone);
-        }
-        return;
-      }
-
-      // If we reach here, no sessionId was returned — log and show fallback error
-      logger.warn('sendOtp did not return sessionId', { phoneNumber: fullPhone, resp });
-      setError((resp as any)?.message || 'Failed to send OTP');
-    } catch (err) {
-      const msg = getApiErrorMessage(err, 'Failed to send OTP. Please try again.');
-      logger.error('Send OTP failed', { message: msg });
-      setError(msg);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to send OTP. Please try again.';
+      setFieldError(message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleTermsPress = () => {
-    const terms = loginLegal?.terms;
-    if (terms?.type === 'url' && terms?.url) {
-      Linking.openURL(terms.url).catch((err) => logger.warn('Failed to open terms URL', err));
-    } else {
-      navigation.navigate('GeneralInfo', { screen: 'TermsAndConditions' });
-    }
-    logger.info('Terms pressed');
-  };
+  if (!readyToShow) return null;
 
-  const handlePrivacyPress = () => {
-    const privacy = loginLegal?.privacy;
-    if (privacy?.type === 'url' && privacy?.url) {
-      Linking.openURL(privacy.url).catch((err) => logger.warn('Failed to open privacy URL', err));
-    } else {
-      navigation.navigate('GeneralInfo', { screen: 'PrivacyPolicy' });
-    }
-    logger.info('Privacy pressed');
-  };
-
-  const isValidPhoneNumber = (phone: string): boolean => {
-    // Basic validation - replace with proper validation
-    return phone.length >= 10 && /^\d+$/.test(phone);
-  };
-
-  if (!readyToShow) {
-    return <View style={styles.splashPlaceholder} />;
-  }
+  const phoneLabel = loginMode === 'whatsapp' ? 'WhatsApp Number' : 'Mobile Number';
+  const showPhoneInvalid = !!(phoneValidation?.showInvalid && fieldError === null && !phoneValidation.valid);
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#034703" />
-      
-      {/* Header Section - Green Background - Starts from safe area */}
-      <SafeAreaView style={styles.headerSafeArea} edges={['top', 'bottom']}>
-        <View style={[styles.headerSection, responsiveStyles.headerSection]}>
-          <View style={[styles.headerContent, responsiveStyles.headerContent]}>
-            {/* Logo Container with circular white background at 20% opacity - Animated */}
-            <Animated.View
-              style={[
-                styles.logoContainer,
-                responsiveStyles.logoContainer,
-                {
-                  opacity: logoOpacity,
-                  transform: [{ scale: logoScale }],
-                },
-              ]}
-            >
-              <Image source={selorgLogo} style={styles.logoImage} resizeMode="contain" />
-            </Animated.View>
-            
-            {/* Title - Animated */}
-            <Animated.View
-              style={[
-                styles.titleContainer,
-                responsiveStyles.titleContainer,
-                {
-                  opacity: titleOpacity,
-                  transform: [{ translateY: titleTranslateY }],
-                },
-              ]}
-            >
-              <Text style={[styles.title, responsiveStyles.title]}>Selorg Organic</Text>
-            </Animated.View>
-            
-            {/* Subtitle - Animated */}
-            <Animated.View
-              style={[
-                styles.subtitleContainer,
-                responsiveStyles.subtitleContainer,
-                {
-                  opacity: subtitleOpacity,
-                  transform: [{ translateY: subtitleTranslateY }],
-                },
-              ]}
-            >
-              <Text style={[styles.subtitle, responsiveStyles.subtitle]}>Fresh organic groceries delivered</Text>
-            </Animated.View>
-          </View>
-        </View>
-      </SafeAreaView>
-
-      {/* Content Section - White Background */}
-      <View style={styles.body}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Pressable style={styles.container} onPress={dismissKeyboard} accessible={false}>
+        <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
         <KeyboardAvoidingView
+          style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.keyboardView}
-          enabled={Platform.OS === 'ios'}
+          keyboardVerticalOffset={0}
         >
           <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: getSpacing(20) }]}
-            showsVerticalScrollIndicator={false}
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            bounces={false}
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
           >
-            <View style={[styles.contentSection, responsiveStyles.contentSection]}>
-              {/* Section Header */}
-              <View style={[styles.sectionHeader, responsiveStyles.sectionHeader]}>
-                <Text style={[styles.sectionTitle, responsiveStyles.sectionTitle]}>Login or Sign Up</Text>
-                <Text style={[styles.sectionSubtitle, responsiveStyles.sectionSubtitle]}>
-                  Enter your mobile number to continue
-                </Text>
+            <View style={styles.centeredBlock}>
+              <LoginWelcomeSection />
+
+              <View style={styles.cardShadow}>
+                <View style={styles.formCard}>
+                  <View style={styles.formBody}>
+                    <Text style={styles.methodLabel}>Choose login method</Text>
+                    <LoginMethodTabs value={loginMode} onChange={handleLoginModeChange} />
+
+                    <View style={styles.fieldSection}>
+                {loginMode === 'email' ? (
+                  <View>
+                    <Text style={styles.fieldLabel}>Email Address</Text>
+                    <TextInput
+                      ref={emailInputRef}
+                      style={[
+                        styles.emailInput,
+                        (emailFocused || email.length > 0) && !fieldError && styles.inputFocus,
+                        fieldError && loginMode === 'email' && styles.inputError,
+                      ]}
+                      placeholder="you@example.com"
+                      placeholderTextColor={theme.colors.placeholder}
+                      value={email}
+                      onChangeText={handleEmailChange}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="done"
+                      blurOnSubmit={false}
+                      autoComplete="off"
+                      textContentType="none"
+                      importantForAutofill="no"
+                      onFocus={() => setEmailFocused(true)}
+                      onBlur={() => setEmailFocused(false)}
+                      onSubmitEditing={() => {
+                        if (isCompleteEmail(email)) dismissKeyboard();
+                      }}
+                    />
+                  </View>
+                ) : (
+                  <PhoneInputRow
+                    country={country}
+                    value={formattedPhone}
+                    onChangeText={handlePhoneChange}
+                    onCountryPress={() => {
+                      dismissKeyboard();
+                      setCountryPickerVisible(true);
+                    }}
+                    hasError={!!fieldError || showPhoneInvalid}
+                    isFocused={phoneFocused}
+                    hasInput={phoneDigits.length > 0}
+                    label={phoneLabel}
+                    inputRef={phoneInputRef}
+                    onFocus={() => setPhoneFocused(true)}
+                    onBlur={() => setPhoneFocused(false)}
+                    onSubmitEditing={dismissKeyboard}
+                  />
+                )}
+
+                {fieldError ? <Text style={styles.errorText}>{fieldError}</Text> : null}
+                {showPhoneInvalid && phoneValidation?.message ? (
+                  <Text style={styles.errorText}>{phoneValidation.message}</Text>
+                ) : null}
               </View>
 
-              {/* Input Container */}
-              <View style={styles.inputSection}>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Mobile Number</Text>
-                  {/* Outer container for JS-driven border color animation */}
-                  <Animated.View
-                    style={[
-                      styles.inputWrapper,
-                      responsiveStyles.inputWrapper,
-                      // Error state takes priority - use static border color
-                      error ? styles.inputWrapperError : {
-                        // Animated border color only when no error (JS-driven)
-                        borderColor: inputBorderColor.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ['#D1D1D1', '#034703'], // From default to focus color
-                        }),
-                        borderWidth: isInputFocused ? 2 : 1.5,
-                      },
-                    ]}
-                  >
-                    {/* Inner container for native-driven scale animation */}
-                    <Animated.View
-                      style={[
-                        styles.inputInnerContainer,
-                        {
-                          transform: [{ scale: inputScale }], // Native-driven
-                        },
-                      ]}
-                    >
-                      {/* Country Code with Flag */}
-                      <View style={[styles.countryCodeContainer, responsiveStyles.countryCodeContainer]}>
-                        <CountryFlagIcon width={scale(14)} height={scale(14)} />
-                        <Text style={[styles.countryCodeText, responsiveStyles.countryCodeText]}>{countryCode}</Text>
-                      </View>
-                      
-                      {/* Phone Number Input */}
-                      <View style={styles.phoneInputContainer}>
-                        <TextInput
-                          style={[styles.phoneInput, responsiveStyles.phoneInput]}
-                          value={phoneNumber}
-                          onChangeText={setPhoneNumber}
-                          placeholder="Enter mobile number"
-                          placeholderTextColor="#6B6B6B"
-                          keyboardType="phone-pad"
-                          maxLength={10}
-                          autoComplete="tel"
-                          textContentType="telephoneNumber"
-                          textAlignVertical="center"
-                          numberOfLines={1}
-                          onFocus={() => setIsInputFocused(true)}
-                          onBlur={() => setIsInputFocused(false)}
-                          returnKeyType="done"
-                          blurOnSubmit={true}
-                        />
-                      </View>
-                    </Animated.View>
-                  </Animated.View>
+              <View style={styles.consentSection}>
+                <ConsentCheckbox
+                  checked={consentChecked}
+                  onToggle={() => {
+                    dismissKeyboard();
+                    setConsentChecked((v) => !v);
+                  }}
+                  onTermsPress={() => {
+                    dismissKeyboard();
+                    setPolicyModal('terms');
+                  }}
+                  onPrivacyPress={() => {
+                    dismissKeyboard();
+                    setPolicyModal('privacy');
+                  }}
+                />
+              </View>
+
+              <View style={styles.buttonContainer}>
+                <Button
+                  title="Send OTP"
+                  onPress={handleSendOTP}
+                  disabled={!canSendOtp}
+                  loading={loading}
+                  variant="primary"
+                  style={{ borderRadius: 12, minHeight: 52 }}
+                />
+              </View>
                 </View>
-                
-                {/* Note Text */}
-                <Text style={[styles.noteText, responsiveStyles.noteText]}>
-                  We'll send you an OTP to verify your number
-                </Text>
-                
-                {/* Error Message - Animated */}
-                {error && (
-                  <Animated.View
-                    style={[
-                      {
-                        opacity: errorOpacity,
-                        transform: [{ translateY: errorTranslateY }],
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.errorText, responsiveStyles.errorText]}>{error}</Text>
-                  </Animated.View>
-                )}
               </View>
             </View>
+            </View>
           </ScrollView>
+
+          <CountryPickerModal
+            visible={countryPickerVisible}
+            selectedCode={country.code}
+            onSelect={handleCountrySelect}
+            onClose={() => setCountryPickerVisible(false)}
+          />
+
+        <PolicyModal
+          visible={policyModal !== null}
+          type={policyModal ?? 'terms'}
+          onClose={() => setPolicyModal(null)}
+        />
         </KeyboardAvoidingView>
-
-        {/* Action Section - stays at bottom; keyboard overlays it naturally */}
-        <View style={[styles.actionSection, responsiveStyles.actionSection, { paddingBottom: Math.max(insets.bottom, getSpacing(24)) }]}>
-          <TouchableOpacity
-            style={[
-              styles.sendOTPButton,
-              responsiveStyles.sendOTPButton,
-              (!isValidPhoneNumber(phoneNumber) || loading) && styles.sendOTPButtonDisabled,
-            ]}
-            onPress={handleSendOTP}
-            disabled={!isValidPhoneNumber(phoneNumber) || loading}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.sendOTPButtonText, responsiveStyles.sendOTPButtonText]}>
-              {loading ? 'Sending...' : 'Send OTP'}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={[styles.termsContainer, responsiveStyles.termsContainer]}>
-            <Text style={[styles.termsText, responsiveStyles.termsText]}>
-              {loginLegal?.preamble ?? 'By continuing, you agree to our '}
-              <Text style={styles.termsLink} onPress={handleTermsPress}>
-                {loginLegal?.terms?.label ?? 'Terms of Service'}
-              </Text>
-              {loginLegal?.connector ?? ' and '}
-              <Text style={styles.termsLink} onPress={handlePrivacyPress}>
-                {loginLegal?.privacy?.label ?? 'Privacy Policy'}
-              </Text>
-            </Text>
-          </View>
-        </View>
-      </View>
-    </View>
+      </Pressable>
+    </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  splashPlaceholder: {
-    flex: 1,
-    backgroundColor: '#034703',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  headerSafeArea: {
-    backgroundColor: '#034703',
-  },
-  headerSection: {
-    width: '100%',
-    backgroundColor: '#034703',
-    // Padding moved to responsiveStyles
-  },
-  headerContent: {
-    alignItems: 'center',
-    width: '100%',
-    // Gap and padding moved to responsiveStyles
-  },
-  logoContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    // Dimensions moved to responsiveStyles
-  },
-  logoImage: {
-    width: scale(31.5),
-    height: scale(31.5),
-  },
-  titleContainer: {
-    width: '100%',
-    // Padding moved to responsiveStyles
-  },
-  title: {
-    fontFamily: 'Inter',
-    fontWeight: '700',
-    textAlign: 'center',
-    color: '#FFFFFF',
-    // Font size moved to responsiveStyles
-  },
-  subtitleContainer: {
-    width: '100%',
-    // Padding moved to responsiveStyles
-  },
-  subtitle: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    textAlign: 'center',
-    color: 'rgba(255, 255, 255, 0.9)',
-    // Font size moved to responsiveStyles
-  },
-  body: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-  },
-  contentSection: {
-    width: '100%',
-    backgroundColor: '#F5F5F5',
-    // Padding and gap moved to responsiveStyles
-  },
-  sectionHeader: {
-    width: '100%',
-    // Gap and height moved to responsiveStyles
-  },
-  sectionTitle: {
-    fontFamily: 'Inter',
-    fontWeight: '600',
-    color: '#1A1A1A',
-    textAlign: 'left',
-    // Font size moved to responsiveStyles
-  },
-  sectionSubtitle: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    color: '#6B6B6B',
-    textAlign: 'left',
-    // Font size moved to responsiveStyles
-  },
-  inputSection: {
-    width: '100%',
-    gap: getSpacing(12),
-  },
-  inputContainer: {
-    width: '100%',
-    gap: getSpacing(4),
-  },
-  inputLabel: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: scaleFont(12, 11, 14),
-    lineHeight: scaleFont(18, 16, 20),
-    color: '#1A1A1A',
-    textAlign: 'left',
-  },
-  inputWrapper: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#D1D1D1',
-    overflow: 'hidden', // Ensure inner content doesn't overflow during scale
-    height: scale(54), // Fixed height for perfect centering
-    minHeight: scale(54),
-    // Padding, height, and borderRadius moved to responsiveStyles
-  },
-  inputInnerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    width: '100%',
-    gap: getSpacing(8),
-    height: '100%',
-    minHeight: scale(54),
-    paddingVertical: 0, // Remove extra vertical padding
-  },
-  inputWrapperError: {
-    borderColor: '#FF3B30',
-    borderWidth: 1.5,
-  },
-  countryCodeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: getSpacing(4),
-    justifyContent: 'center',
-    // Width moved to responsiveStyles
-  },
-  countryCodeText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    color: '#2A2A2A',
-    textAlignVertical: 'center',
-    // Font size moved to responsiveStyles
-  },
-  phoneInputContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    height: '100%',
-    paddingVertical: 0, // Ensures vertical center
-  },
-  phoneInput: {
-    width: '100%',
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    color: '#1A1A1A',
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    margin: 0,
-    textAlignVertical: 'center',
-    textAlign: 'left',
-    includeFontPadding: false,
-    fontSize: scaleFont(14, 13, 15), // Reduced size for entered number
-    lineHeight: scaleFont(18, 17, 19), // Adjusted lineHeight for smaller font
-    // Font size moved to responsiveStyles
-    ...(Platform.OS === 'android' && {
-      paddingVertical: 0,
-    }),
-    ...(Platform.OS === 'ios' && {
-      paddingTop: 0,
-      paddingBottom: 0,
-    }),
-  },
-  noteText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    color: '#6B6B6B',
-    textAlign: 'left',
-    // Font size moved to responsiveStyles
-  },
-  errorText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    color: '#FF3B30',
-    // Font size and margin moved to responsiveStyles
-  },
-  actionSection: {
-    width: '100%',
-    backgroundColor: '#F5F5F5',
-    // Padding and gap moved to responsiveStyles
-  },
-  sendOTPButton: {
-    width: '100%',
-    backgroundColor: '#034703',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: getSpacing(10),
-    // Padding and borderRadius moved to responsiveStyles
-  },
-  sendOTPButtonDisabled: {
-    backgroundColor: '#CCCCCC',
-    opacity: 0.6,
-  },
-  sendOTPButtonText: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    // Font size moved to responsiveStyles
-  },
-  termsContainer: {
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    // Padding moved to responsiveStyles
-  },
-  termsText: {
-    fontFamily: 'Inter',
-    fontWeight: '400',
-    color: '#6B6B6B',
-    textAlign: 'center',
-    // Font size and width moved to responsiveStyles
-  },
-  termsLink: {
-    color: '#034703',
-    textDecorationLine: 'underline',
-  },
-});
 
 export default Login;

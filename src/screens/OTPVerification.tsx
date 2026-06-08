@@ -18,12 +18,16 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Header from '../components/layout/Header';
 import OTPIconContainer from '../assets/images/otp-icon-container.svg';
 import type { RootStackParamList } from '../types/navigation';
-import { verifyOtp } from '../services/auth/authService';
+import { verifyOtp, resendLoginOtp, getChannelLabel } from '../services/auth/authService';
 import { tokenManager } from '../services/api/tokenManager';
 import { useDimensions, scale, scaleFont, getSpacing, getBorderRadius, wp } from '../utils/responsive';
 import { logger } from '@/utils/logger';
 import { getApiErrorMessage } from '../services/api/types';
 import { addressService } from '../services/address/addressService';
+import { AuthLayout } from '@/constants/authTheme';
+import { loadPendingOtpSession, clearPendingOtpSession } from '@/utils/pendingOtpSession';
+import type { LoginMode } from '@/services/auth/authService';
+import { APP_LAUNCH_ID } from '@/constants/appLaunch';
 
 type OTPVerificationRouteProp = RouteProp<RootStackParamList, 'OTPVerification'>;
 
@@ -32,13 +36,50 @@ interface OTPVerificationScreenProps {}
 const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<OTPVerificationRouteProp>();
-  const phoneNumber = route.params?.phoneNumber || '+91 9876543210';
-  const sessionIdParam = route.params?.sessionId as string | undefined;
+  const routeParams = route.params ?? { phoneNumber: '' };
+
+  const [sessionMeta, setSessionMeta] = useState({
+    displayTarget: routeParams.displayTarget || routeParams.phoneNumber || '',
+    sessionId: routeParams.sessionId as string | undefined,
+    loginMode: (routeParams.loginMode || 'mobile') as LoginMode,
+    otpTarget: routeParams.otpTarget || 'phone',
+    countryCode: routeParams.countryCode || '+91',
+    phone: routeParams.phone || '',
+    email: routeParams.email || '',
+    channel: routeParams.channel || 'sms',
+  });
+
   const { width } = useDimensions();
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    let mounted = true;
+    loadPendingOtpSession().then((stored) => {
+      if (!mounted || !stored) return;
+      setSessionMeta((prev) => ({
+        displayTarget: stored.displayTarget || prev.displayTarget,
+        sessionId: stored.sessionId || prev.sessionId,
+        loginMode: stored.loginMode || prev.loginMode,
+        otpTarget: stored.otpTarget || prev.otpTarget,
+        countryCode: stored.countryCode || prev.countryCode,
+        phone: stored.phone || prev.phone,
+        email: stored.email || prev.email,
+        channel: stored.channel || prev.channel,
+      }));
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const channelLabel = getChannelLabel(sessionMeta.channel, sessionMeta.loginMode);
+  const smsFallbackHint =
+    sessionMeta.loginMode === 'whatsapp' && String(sessionMeta.channel).toLowerCase().includes('sms')
+      ? ' (sent via SMS fallback)'
+      : '';
   
   const [otp, setOtp] = useState<string[]>(['', '', '', '']);
-  const [timer, setTimer] = useState<number>(50); // seconds
+  const [timer, setTimer] = useState<number>(AuthLayout.resendCooldownSec);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [focusedInputIndex, setFocusedInputIndex] = useState<number | null>(null);
@@ -433,10 +474,13 @@ const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
     try {
       const otpCode = otp.join('');
 
-      logger.info('Verifying OTP', { otpCode, phoneNumber, sessionId: sessionIdParam });
+      logger.info('Verifying OTP', {
+        otpCode,
+        displayTarget: sessionMeta.displayTarget,
+        sessionId: sessionMeta.sessionId,
+      });
 
-      // Use auth service verifyOtp which handles token storage on success
-      const resp = await verifyOtp(sessionIdParam || '', otpCode);
+      const resp = await verifyOtp(sessionMeta.sessionId || '', otpCode);
 
       if (resp && resp.data && resp.data.accessToken) {
         logger.info('OTP verified successfully, navigating to main app');
@@ -463,25 +507,21 @@ const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
   };
 
   const handleResendOTP = async () => {
-    if (timer > 0) return; // Can't resend if timer is still running
+    if (timer > 0 || !sessionMeta.sessionId) return;
 
     setLoading(true);
     setError(null);
-    setTimer(50); // Reset timer
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await fetch('/api/auth/resend-otp', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({ phoneNumber }),
-      // });
-      
-      logger.info('Resending OTP', { phoneNumber });
-      await new Promise<void>(resolve => setTimeout(resolve, 500));
-      setOtp(['', '', '', '']); // Clear OTP inputs
+      logger.info('Resending OTP', { sessionId: sessionMeta.sessionId });
+      const resp = await resendLoginOtp(sessionMeta.sessionId, sessionMeta.loginMode);
+      const cooldown =
+        (resp as { resendCooldownSeconds?: number }).resendCooldownSeconds ??
+        resp.data?.resendCooldownSeconds ??
+        AuthLayout.resendCooldownSec;
+      setTimer(cooldown);
+      setOtp(['', '', '', '']);
+      inputRefs.current[0]?.focus();
     } catch (err) {
       const msg = getApiErrorMessage(err, 'Failed to resend OTP. Please try again.');
       logger.error('Resend OTP failed', { message: msg });
@@ -489,6 +529,17 @@ const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleChangeContact = async () => {
+    await clearPendingOtpSession();
+    navigation.replace('Login', {
+      fromSplash: routeParams.fromSplash ?? APP_LAUNCH_ID,
+      loginMode: sessionMeta.loginMode,
+      email: sessionMeta.email || undefined,
+      phone: sessionMeta.phone || undefined,
+      countryCode: sessionMeta.countryCode || undefined,
+    });
   };
 
   return (
@@ -552,28 +603,38 @@ const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
                       },
                     ]}
                   >
-                    <Text style={[styles.paragraph, responsiveStyles.paragraph]}>We've sent a 4-digit code to</Text>
+                    <Text style={[styles.paragraph, responsiveStyles.paragraph]}>
+                      We've sent a 4-digit code via {channelLabel}
+                      {smsFallbackHint} to
+                    </Text>
                   </Animated.View>
                 </View>
 
                 {/* Phone Number, Timer & Resend */}
                 <View style={[styles.phoneTimerContainer, responsiveStyles.phoneTimerContainer]}>
                   <View style={[styles.phoneContainer, responsiveStyles.phoneContainer]}>
-                    <Text style={[styles.phoneNumber, responsiveStyles.phoneNumber]}>{phoneNumber}</Text>
+                    <Text style={[styles.phoneNumber, responsiveStyles.phoneNumber]}>{sessionMeta.displayTarget}</Text>
                   </View>
                   {timer > 0 ? (
                     <View style={[styles.timerContainer, responsiveStyles.timerContainer]}>
                       <Text style={[styles.timerText, responsiveStyles.timerText]}>Resend code in {formatTimer(timer)}</Text>
                     </View>
                   ) : (
-                    <TouchableOpacity
-                      style={[styles.timerContainer, responsiveStyles.timerContainer]}
-                      onPress={handleResendOTP}
-                      disabled={loading}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.resendLinkText, responsiveStyles.timerText]}>Resend OTP</Text>
-                    </TouchableOpacity>
+                    <View style={styles.resendRow}>
+                      <TouchableOpacity
+                        style={[styles.timerContainer, responsiveStyles.timerContainer]}
+                        onPress={handleResendOTP}
+                        disabled={loading}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.resendLinkText, responsiveStyles.timerText]}>Resend OTP</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={handleChangeContact} activeOpacity={0.7}>
+                        <Text style={[styles.changeContactText, responsiveStyles.timerText]}>
+                          Change {sessionMeta.otpTarget === 'email' ? 'email' : 'number'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
                 </View>
 
@@ -791,6 +852,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     color: '#034703',
+  },
+  resendRow: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  changeContactText: {
+    fontFamily: 'Inter',
+    fontWeight: '500',
+    textAlign: 'center',
+    color: '#034703',
+    textDecorationLine: 'underline',
   },
   otpContainer: {
     width: '100%',

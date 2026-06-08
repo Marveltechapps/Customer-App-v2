@@ -26,7 +26,7 @@ config.watchFolders = [
 config.resolver = {
   ...config.resolver,
   assetExts: config.resolver.assetExts.filter((ext) => ext !== 'svg'),
-  sourceExts: [...config.resolver.sourceExts, 'svg'],
+  sourceExts: [...config.resolver.sourceExts, 'svg', 'cjs'],
   resolveRequest(context, moduleName, platform) {
     if (platform === 'web' && moduleName === 'react-native-maps') {
       return { type: 'sourceFile', filePath: path.resolve(projectRoot, 'src/stubs/react-native-maps.web.js') };
