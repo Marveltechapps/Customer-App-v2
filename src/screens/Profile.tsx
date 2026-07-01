@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   },
   updateButton: {
     width: '100%',
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     opacity: 0.8,
     borderRadius: 8,
     paddingVertical: 8,
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
   addressTagBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(3, 71, 3, 0.08)',
+    backgroundColor: '#A12702',
     paddingVertical: 3,
     paddingHorizontal: 10,
     borderRadius: 12,
@@ -467,10 +467,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '600',
     fontSize: 12,
-    color: '#034703',
+    color: '#A12702',
   },
   defaultBadge: {
-    backgroundColor: 'rgba(3, 71, 3, 0.06)',
+    backgroundColor: '#A12702',
     paddingVertical: 2,
     paddingHorizontal: 8,
     borderRadius: 10,
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '500',
     fontSize: 10,
-    color: '#034703',
+    color: '#A12702',
   },
   addressText: {
     fontFamily: 'Inter',
@@ -518,18 +518,18 @@ const styles = StyleSheet.create({
   },
   addAddressButton: {
     borderWidth: 1,
-    borderColor: '#034703',
+    borderColor: '#A12702',
     borderRadius: 8,
     borderStyle: 'dashed',
     paddingVertical: 12,
     alignItems: 'center',
-    backgroundColor: 'rgba(3, 71, 3, 0.02)',
+    backgroundColor: '#A12702',
   },
   addAddressButtonText: {
     fontFamily: 'Inter',
     fontWeight: '600',
     fontSize: 14,
-    color: '#034703',
+    color: '#A12702',
   },
 
   // --- Referral ---
@@ -539,12 +539,12 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderWidth: 1,
-    borderColor: '#E0F2F1',
+    borderColor: '#A12702',
   },
   referralTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#034703',
+    color: '#A12702',
   },
   referralDescription: {
     fontSize: 13,
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   referralCodeContainer: {
-    backgroundColor: '#F0FFF0',
+    backgroundColor: '#A12702',
     borderRadius: 8,
     padding: 12,
     gap: 8,
@@ -571,11 +571,11 @@ const styles = StyleSheet.create({
   referralCode: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#034703',
+    color: '#A12702',
     letterSpacing: 2,
   },
   referralShareButton: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 6,

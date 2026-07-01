@@ -87,7 +87,7 @@ const DEFAULT_APP_CONFIG: AppConfigData = {
   supportCategories: [],
   search: { placeholder: 'Search for products' },
   notifications: { channelsAvailable: [], dndStartHour: 22, dndEndHour: 7 },
-  branding: { primaryColor: '#034703', countryCode: '+91' },
+  branding: { primaryColor: '#A12702', countryCode: '+91' },
 };
 
 interface AppConfigContextValue {

@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   },
   rateButton: {
     width: '100%',
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -171,13 +171,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#034703',
+    borderColor: '#A12702',
     alignItems: 'center',
   },
   homeButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#034703',
+    color: '#A12702',
   },
 });
 

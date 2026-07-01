@@ -50,7 +50,7 @@ export default function PhoneInputRow({
         row: {
           flexDirection: 'row',
           borderWidth: 1,
-          borderColor: '#B8D4BA',
+          borderColor: '#E8D447',
           borderRadius: 12,
           overflow: 'hidden',
           backgroundColor: theme.colors.inputBg,
@@ -70,8 +70,8 @@ export default function PhoneInputRow({
           paddingVertical: theme.spacing.md + 2,
           gap: 4,
           borderRightWidth: 1,
-          borderRightColor: '#B8D4BA',
-          backgroundColor: '#F7FAF7',
+          borderRightColor: '#E8D447',
+          backgroundColor: '#A12702',
         },
         flag: { fontSize: 18 },
         dialCode: {

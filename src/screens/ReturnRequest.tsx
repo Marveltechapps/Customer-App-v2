@@ -184,8 +184,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   reasonOptionSelected: {
-    borderColor: '#034703',
-    backgroundColor: '#F0FFF0',
+    borderColor: '#A12702',
+    backgroundColor: '#A12702',
   },
   radioOuter: {
     width: 20,
@@ -197,13 +197,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   radioOuterSelected: {
-    borderColor: '#034703',
+    borderColor: '#A12702',
   },
   radioInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
   },
   reasonText: {
     fontSize: 14,
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
   photoUploadText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#034703',
+    color: '#A12702',
   },
   photoUploadHint: {
     fontSize: 12,
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     color: '#828282',
   },
   submitButton: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',

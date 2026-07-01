@@ -10,7 +10,7 @@ interface VerificationCheckIconProps {
 export default function VerificationCheckIcon({ 
   width = 28, 
   height = 28, 
-  color = '#034703' 
+  color = '#A12702' 
 }: VerificationCheckIconProps) {
   return (
     <Svg width={width} height={height} viewBox="0 0 28 28" fill="none">

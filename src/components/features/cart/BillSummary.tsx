@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   savingsBadge: {
-    backgroundColor: '#D7F1D7',
+    backgroundColor: '#A12702',
     borderRadius: 4,
     paddingVertical: 4,
     paddingHorizontal: 8,
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
   savingsBadgeText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#2C512C',
+    color: '#A12702',
     lineHeight: 18,
   },
   divider: {
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     width: 9,
     height: 9,
     borderRadius: 33554400,
-    backgroundColor: '#E0F2F1',
+    backgroundColor: '#A12702',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   couponDiscountValue: {
-    color: '#00A85A',
+    color: '#A12702',
   },
 });
 

@@ -513,20 +513,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconCircle: {
-    backgroundColor: 'rgba(3, 71, 3, 0.08)',
+    backgroundColor: '#A12702',
     justifyContent: 'center',
     alignItems: 'center',
   },
   pulseRing: {
     position: 'absolute',
-    backgroundColor: 'rgba(3, 71, 3, 0.15)',
+    backgroundColor: '#A12702',
   },
   pin: {
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
   pinHead: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
     height: 0,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#034703',
+    borderTopColor: '#A12702',
     marginTop: -2,
   },
   heading: {
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
   },
   deniedContainer: {
-    backgroundColor: 'rgba(3, 71, 3, 0.06)',
+    backgroundColor: '#A12702',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -577,13 +577,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '400',
     textAlign: 'center',
-    color: '#034703',
+    color: '#A12702',
   },
   actionArea: {
     paddingBottom: 24,
   },
   button: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -635,7 +635,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     borderWidth: 3,
     borderColor: '#FFFFFF',
     shadowColor: '#000',
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 10,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#034703',
+    borderTopColor: '#A12702',
     marginTop: -2,
   },
   addressOverlay: {
@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -706,7 +706,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 8,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#034703',
+    borderTopColor: '#A12702',
     marginTop: -1,
   },
   addressTextContainer: {
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
   },
   confirmButton: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -770,8 +770,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   tagChipActive: {
-    backgroundColor: 'rgba(3, 71, 3, 0.1)',
-    borderColor: '#034703',
+    backgroundColor: '#A12702',
+    borderColor: '#A12702',
   },
   tagChipText: {
     fontFamily: 'Inter',
@@ -780,7 +780,7 @@ const styles = StyleSheet.create({
     color: '#6B6B6B',
   },
   tagChipTextActive: {
-    color: '#034703',
+    color: '#A12702',
   },
   // skip button removed per requirements
   customTagInput: {

@@ -113,7 +113,7 @@ const SplashScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#034703" />
+      <StatusBar barStyle="light-content" backgroundColor="#F3E008" />
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.content}>
           {/* Logo with animation */}
@@ -168,7 +168,7 @@ const SplashScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#034703',
+    backgroundColor: '#F3E008',
   },
   safeArea: {
     flex: 1,

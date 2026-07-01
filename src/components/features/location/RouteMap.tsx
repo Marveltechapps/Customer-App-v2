@@ -295,7 +295,7 @@ const RouteMap: React.FC<RouteMapProps> = ({
   if (loading && !providedCurrentLocation) {
     return (
       <View style={[styles.container, { height }]}>
-        <ActivityIndicator size="large" color="#034703" />
+        <ActivityIndicator size="large" color="#A12702" />
         <Text style={styles.loadingText}>Loading map...</Text>
       </View>
     );
@@ -458,7 +458,7 @@ const RouteMap: React.FC<RouteMapProps> = ({
         showsMyLocationButton={false}
         toolbarEnabled={false}
         loadingEnabled={true}
-        loadingIndicatorColor="#034703"
+        loadingIndicatorColor="#A12702"
         onMapReady={() => {
           logger.info('Map is ready');
           if (currentLocation && destination) {
@@ -526,7 +526,7 @@ const RouteMap: React.FC<RouteMapProps> = ({
             destination={destination}
             apikey={GOOGLE_MAPS_API_KEY}
             strokeWidth={5}
-            strokeColor="#034703"
+            strokeColor="#A12702"
             mode={haversineKm(currentLocation, destination) < 2 ? 'WALKING' : 'DRIVING'}
             region="in"
             optimizeWaypoints={true}
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   settingsButton: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 6,
@@ -666,7 +666,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   markerLabel: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     paddingVertical: 4,
     paddingHorizontal: 14,
     borderRadius: 12,
@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 6,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#034703',
+    borderTopColor: '#A12702',
   },
   markerDot: {
     width: 10,
@@ -699,7 +699,7 @@ const styles = StyleSheet.create({
     marginTop: -1,
   },
   originDot: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
   },
   destinationLabel: {
     backgroundColor: '#FA7500',
@@ -769,7 +769,7 @@ const styles = StyleSheet.create({
   routeInfoDistValue: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#034703',
+    color: '#A12702',
   },
   routeInfoDistLabel: {
     fontSize: 10,

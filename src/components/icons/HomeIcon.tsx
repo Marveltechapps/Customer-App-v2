@@ -6,7 +6,7 @@ interface HomeIconProps {
   size?: number;
 }
 
-export default function HomeIcon({ color = '#034703', size = 24 }: HomeIconProps) {
+export default function HomeIcon({ color = '#A12702', size = 24 }: HomeIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path

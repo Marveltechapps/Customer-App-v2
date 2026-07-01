@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   paginationDotActive: {
     width: 16,
     height: 8,
-    backgroundColor: '#034703', // Green color for active indicator
+    backgroundColor: '#A12702',
   },
   paginationDotInactive: {
     width: 8,

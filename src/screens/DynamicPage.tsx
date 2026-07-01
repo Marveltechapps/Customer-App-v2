@@ -47,7 +47,7 @@ export default function DynamicPage() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#034703" />
+        <ActivityIndicator size="large" color="#A12702" />
       </View>
     );
   }

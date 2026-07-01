@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   },
   selectedContainer: {
     backgroundColor: '#F5F5F5',
-    borderLeftColor: '#2D5016',
+    borderLeftColor: '#A12702',
   },
   imageContainerWrapper: {
     alignItems: 'center',
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F0F0',
   },
   imageContainerOuterSelected: {
-    borderColor: '#2D5016',
+    borderColor: '#A12702',
   },
   imageContainer: {
     overflow: 'hidden',
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   selectedCategoryName: {
-    color: '#2D5016',
+    color: '#A12702',
     fontWeight: '600',
   },
 });

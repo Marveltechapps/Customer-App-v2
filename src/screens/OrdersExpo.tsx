@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterButtonActive: {
-    backgroundColor: Theme.colors.primary, // #034703
+    backgroundColor: Theme.colors.primary, // #A12702
   },
   filterButtonText: {
     ...Theme.typography.menuItem,

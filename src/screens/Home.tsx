@@ -294,7 +294,7 @@ export default function HomeScreen() {
                   keyExtractor={(item) => item._id}
                   renderItem={({ item }) => (
                     <TouchableOpacity
-                      style={[styles.couponBannerCard, { borderColor: item.themeColor || '#2A7D4F' }]}
+                      style={[styles.couponBannerCard, { borderColor: item.themeColor || '#A12702' }]}
                       onPress={() => {
                         navigation.navigate('MainTabs', {
                           screen: 'Cart',
@@ -317,8 +317,8 @@ export default function HomeScreen() {
                           recyclingKey={`coupon-${item._id}`}
                         />
                       ) : (
-                        <View style={[styles.couponTextCard, { backgroundColor: (item.themeColor || '#2A7D4F') + '15' }]}>
-                          <Text style={[styles.couponDisplayName, { color: item.themeColor || '#2A7D4F' }]}>{item.displayName}</Text>
+                        <View style={[styles.couponTextCard, { backgroundColor: (item.themeColor || '#A12702') + '15' }]}>
+                          <Text style={[styles.couponDisplayName, { color: item.themeColor || '#A12702' }]}>{item.displayName}</Text>
                           <Text style={styles.couponDiscountSummary}>{item.description || `Get ${item.discountValue}${item.couponType === 'PERCENTAGE' ? '%' : ' ₹'} off`}</Text>
                           {item.endDate && (
                             <Text style={styles.couponExpiryText}>Expires: {new Date(item.endDate).toLocaleDateString()}</Text>
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     borderRadius: 8,
     alignSelf: 'center',
   },
@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
   couponDisplayName: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#034703',
+    color: '#A12702',
   },
   couponDiscountSummary: {
     fontSize: 14,

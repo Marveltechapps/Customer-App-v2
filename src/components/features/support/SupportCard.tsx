@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   button: {
-    backgroundColor: '#3F723F',
+    backgroundColor: '#A12702',
     borderRadius: 4,
     paddingVertical: 8,
     paddingHorizontal: 16,

@@ -134,20 +134,20 @@ export async function registerForPushNotifications(): Promise<string | null> {
       name: 'Default',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#034703',
+      lightColor: '#A12702',
     });
     await Notifications.setNotificationChannelAsync('orders', {
       name: 'Order Updates',
       description: 'Notifications about your order status',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#034703',
+      lightColor: '#A12702',
     });
     await Notifications.setNotificationChannelAsync('payments', {
       name: 'Payments & Refunds',
       description: 'Notifications about payments and refunds',
       importance: Notifications.AndroidImportance.HIGH,
-      lightColor: '#034703',
+      lightColor: '#A12702',
     });
   }
 

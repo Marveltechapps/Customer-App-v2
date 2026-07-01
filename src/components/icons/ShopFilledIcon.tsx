@@ -6,7 +6,7 @@ interface ShopFilledIconProps {
   size?: number;
 }
 
-export default function ShopFilledIcon({ color = '#034703', size = 24 }: ShopFilledIconProps) {
+export default function ShopFilledIcon({ color = '#A12702', size = 24 }: ShopFilledIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 21 22" fill="none">
       <Path

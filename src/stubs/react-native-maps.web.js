@@ -19,7 +19,7 @@ const WEB_STYLES = StyleSheet.create({
   mapImg: { width: '100%', height: '100%', resizeMode: 'cover' },
   placeholder: { padding: 16, alignItems: 'center', maxWidth: 280 },
   placeholderText: { fontSize: 14, color: '#525252', textAlign: 'center', marginBottom: 12 },
-  link: { fontSize: 14, color: '#034703', fontWeight: '600', textDecorationLine: 'underline' },
+  link: { fontSize: 14, color: '#A12702', fontWeight: '600', textDecorationLine: 'underline' },
 });
 
 function WebMapView(props) {

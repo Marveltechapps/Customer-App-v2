@@ -235,14 +235,14 @@ const styles = StyleSheet.create({
   },
   paginationDotActive: {
     width: 28,
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
   },
   ctaButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'stretch',
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     borderRadius: 8,
     paddingVertical: 13,
     paddingHorizontal: 143,

@@ -186,7 +186,7 @@ const StandalonePaymentFlow: React.FC<Props> = ({ standalone, navigation }) => {
       {phase === 'processing' ? (
         <View style={styles.inner}>
           <View style={styles.spinnerWrap}>
-            <ActivityIndicator size="large" color="#034703" />
+            <ActivityIndicator size="large" color="#A12702" />
           </View>
           <Text style={styles.processTitle}>Processing payment…</Text>
           <Text style={styles.subtitle}>Please wait while we securely complete your payment.</Text>
@@ -313,14 +313,14 @@ const styles = StyleSheet.create({
   orderValueMuted: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#034703',
+    color: '#A12702',
   },
   actions: {
     paddingHorizontal: 20,
     gap: 12,
   },
   primaryBtn: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     borderRadius: 10,
     paddingVertical: 16,
     alignItems: 'center',
@@ -336,10 +336,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#034703',
+    borderColor: '#A12702',
   },
   secondaryText: {
-    color: '#034703',
+    color: '#A12702',
     fontSize: 16,
     fontWeight: '600',
   },

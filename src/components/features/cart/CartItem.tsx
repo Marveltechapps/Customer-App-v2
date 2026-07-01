@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   imageGradient: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#E8F4F3', // Approximate gradient color (mix of rgba(224, 242, 241, 1) and rgba(245, 245, 245, 1))
+    backgroundColor: '#A12702',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   discountedPrice: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#034703',
+    color: '#A12702',
     lineHeight: 20, // 1.4285714285714286em
   },
   originalPrice: {
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     lineHeight: 16, // 1.333em
   },
   discountBadge: {
-    backgroundColor: '#E0F2F1',
+    backgroundColor: '#A12702',
     borderRadius: 3.5,
     paddingVertical: 4,
     paddingHorizontal: 6,
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
   discountBadgeText: {
     fontSize: 10,
     fontWeight: '400',
-    color: '#034703',
+    color: '#A12702',
     lineHeight: 16, // 1.6em
     textAlign: 'center',
     flexShrink: 0,
@@ -229,11 +229,11 @@ const styles = StyleSheet.create({
     width: 110, // Increased from 88 for more width
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: '#034703', // Match "Continue to Payment" button color
+    backgroundColor: '#A12702', // Match "Continue to Payment" button color
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#012D01', // Match ProductCard addButton border color
-    shadowColor: '#011501', // Match ProductCard addButton shadow color
+    borderColor: '#A12702', // Match ProductCard addButton border color
+    shadowColor: '#A12702', // Match ProductCard addButton shadow color
     shadowOffset: { width: 2, height: 2 },
     shadowOpacity: 0.31,
     shadowRadius: 3,

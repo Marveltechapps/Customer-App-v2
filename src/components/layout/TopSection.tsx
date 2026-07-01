@@ -186,7 +186,7 @@ const homepageVideo = require('../../assets/videos/homepage_video.mp4');
         ]}
         onLayout={handleVideoLayout}
       >
-        {/* Green Background Layer - Bottom (zIndex: 0) */}
+        {/* Brand Background Layer - Bottom (zIndex: 0) */}
         <View 
           style={[
             styles.greenBackground, 
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     width: '100%',
     position: 'relative',
     overflow: 'hidden',
-    backgroundColor: '#034703', // Match green background for smoother transitions
+    backgroundColor: '#A12702',
   },
   greenBackground: {
     position: 'absolute',
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     width: '100%',
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     zIndex: 0,
   },
   backgroundVideo: {

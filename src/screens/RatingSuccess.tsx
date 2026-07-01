@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: '#034703',
+    borderColor: '#A12702',
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     lineHeight: 24,
-    color: '#034703',
+    color: '#A12702',
   },
 });
 

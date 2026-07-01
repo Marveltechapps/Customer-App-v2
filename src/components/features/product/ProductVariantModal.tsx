@@ -423,7 +423,7 @@ export default function ProductVariantModal({
           >
             {loading ? (
               <View style={styles.loadingState}>
-                <ActivityIndicator size="large" color="#3F723F" />
+                <ActivityIndicator size="large" color="#A12702" />
               </View>
             ) : variantList && variantList.length > 0 ? (
               variantList.map((variant, index) => {
@@ -818,7 +818,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.1)', // Match Figma: fill_VAYCYJ
-    borderColor: '#034703', // Match Figma: stroke_5T7FAG
+    borderColor: '#A12702', // Match Figma: stroke_5T7FAG
     borderWidth: 1,
   },
   addButtonText: {
@@ -826,7 +826,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 14,
     lineHeight: 20, // 1.4285714285714286em
-    color: '#034703', // Match Figma: fill_4UYMCR
+    color: '#A12702', // Match Figma: fill_4UYMCR
   },
   quantitySelector: {
     flexDirection: 'row',
@@ -835,16 +835,16 @@ const styles = StyleSheet.create({
     gap: 10,
     minWidth: 102,
     minHeight: 36,
-    backgroundColor: '#3F723F', // Match Figma: fill_Q5KA8O
+    backgroundColor: '#A12702', // Match Figma: fill_Q5KA8O
     borderWidth: 1,
-    borderColor: '#023302', // Match Figma: stroke_EOX080
+    borderColor: '#A12702', // Match Figma: stroke_EOX080
     borderRadius: 4,
     paddingVertical: 8,
     paddingHorizontal: 12,
     // Note: React Native doesn't support inset shadows directly
-    // Figma has: inset 2px 2px 3px 0px rgba(1, 21, 1, 0.31)
+   
     // Using regular shadow as fallback
-    shadowColor: '#011501',
+    shadowColor: '#A12702',
     shadowOffset: {
       width: 2,
       height: 2,

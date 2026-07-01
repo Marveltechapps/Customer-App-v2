@@ -1112,7 +1112,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
                       disabled={!couponCode || isApplyingCoupon}
                     >
                       {isApplyingCoupon ? (
-                        <ActivityIndicator size="small" color="#034703" />
+                        <ActivityIndicator size="small" color="#A12702" />
                       ) : (
                         <Text style={styles.applyButtonText}>Apply</Text>
                       )}
@@ -1157,7 +1157,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
                 >
                   <View style={styles.viewCouponsContent}>
                     <Text style={styles.viewCouponsText}>View Coupons & Offers</Text>
-                    <PlusIcon width={12} height={12} fill="#034703" />
+                    <PlusIcon width={12} height={12} fill="#A12702" />
                   </View>
                 </TouchableOpacity>
               )}
@@ -1710,7 +1710,7 @@ const styles = StyleSheet.create({
   appliedCouponCodeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#3F723F',
+    color: '#A12702',
     lineHeight: 18, // 1.5em
     fontFamily: 'Poppins', // Note: Poppins may not be available, will use system default
   },
@@ -1734,7 +1734,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   nudgeBanner: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#A12702',
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -1742,7 +1742,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#C8E6C9',
+    borderColor: '#A12702',
   },
   nudgeContent: {
     flexDirection: 'row',
@@ -1752,7 +1752,7 @@ const styles = StyleSheet.create({
   },
   nudgeText: {
     fontSize: 12,
-    color: '#2E7D32',
+    color: '#A12702',
     fontWeight: '500',
   },
   nudgeApplyButton: {
@@ -1761,7 +1761,7 @@ const styles = StyleSheet.create({
   },
   nudgeApplyText: {
     fontSize: 12,
-    color: '#034703',
+    color: '#A12702',
     fontWeight: '700',
   },
   couponInputWrapper: {
@@ -1791,24 +1791,24 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   applyButtonText: {
-    color: '#034703',
+    color: '#A12702',
     fontWeight: '700',
     fontSize: 14,
   },
   couponSuccessBanner: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#A12702',
     padding: 10,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#C8E6C9',
+    borderColor: '#A12702',
   },
   couponSuccessText: {
-    color: '#2E7D32',
+    color: '#A12702',
     fontSize: 12,
     fontWeight: '600',
   },
   couponCashbackText: {
-    color: '#2E7D32',
+    color: '#A12702',
     fontSize: 11,
     marginTop: 2,
   },
@@ -1834,7 +1834,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   viewCouponsText: {
-    color: '#034703',
+    color: '#A12702',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -1930,7 +1930,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 13,
     paddingHorizontal: 16, // Reduced padding to allow text in one line
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     borderRadius: 8,
     minHeight: 48,
   },
@@ -1999,7 +1999,7 @@ const styles = StyleSheet.create({
     width: 61,
   },
   tipButtonSelected: {
-    borderColor: '#034703',
+    borderColor: '#A12702',
     backgroundColor: '#F5F5F5',
   },
   tipButtonCustom: {
@@ -2104,13 +2104,13 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 2,
     borderWidth: 1,
-    borderColor: '#034703',
+    borderColor: '#A12702',
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   deliveryInstructionCheckboxChecked: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
   },
   deliveryInstructionCheckboxText: {
     fontSize: 10,
@@ -2132,7 +2132,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   deliveryInstructionButtonEnabled: {
-    backgroundColor: '#E0F2F1',
+    backgroundColor: '#A12702',
   },
   deliveryInstructionButtonDisabled: {
     backgroundColor: '#F5F5F5',
@@ -2244,7 +2244,7 @@ const styles = StyleSheet.create({
   changeButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#3F723F',
+    color: '#A12702',
     lineHeight: 20,
   },
   paymentSection: {
@@ -2267,12 +2267,12 @@ const styles = StyleSheet.create({
   paymentAmount: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#3F723F',
+    color: '#A12702',
     lineHeight: 28,
     textAlign: 'center',
   },
   paymentButton: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     borderRadius: 8,
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -2329,13 +2329,13 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#034703',
+    borderColor: '#A12702',
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   saveContactCheckboxChecked: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
   },
   saveContactCheckmark: {
     color: '#FFFFFF',
@@ -2460,7 +2460,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 8,
     paddingHorizontal: 16,
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     borderRadius: 8,
   },
   customTipApplyButtonText: {

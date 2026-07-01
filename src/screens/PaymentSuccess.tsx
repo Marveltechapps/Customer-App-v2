@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -120,14 +120,14 @@ const styles = StyleSheet.create({
   orderValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#034703',
+    color: '#A12702',
   },
   actions: {
     paddingHorizontal: 20,
     gap: 12,
   },
   primaryBtn: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     borderRadius: 10,
     paddingVertical: 16,
     alignItems: 'center',
@@ -143,10 +143,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#034703',
+    borderColor: '#A12702',
   },
   secondaryText: {
-    color: '#034703',
+    color: '#A12702',
     fontSize: 16,
     fontWeight: '600',
   },

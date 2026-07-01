@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryButton: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
   },
   primaryButtonText: {
     color: '#FFFFFF',
@@ -134,10 +134,10 @@ const styles = StyleSheet.create({
   secondaryButton: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#034703',
+    borderColor: '#A12702',
   },
   secondaryButtonText: {
-    color: '#034703',
+    color: '#A12702',
     fontSize: 16,
     fontWeight: '600',
     fontFamily: 'Inter',

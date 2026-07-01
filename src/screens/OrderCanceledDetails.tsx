@@ -116,7 +116,7 @@ const OrderCanceledDetails: React.FC = () => {
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <Header title="Order Details" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#034703" />
+          <ActivityIndicator size="large" color="#A12702" />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
   orderSummaryContainer: { backgroundColor: '#FFFFFF', marginHorizontal: 16, marginTop: 12, padding: 16, borderRadius: 8 },
   orderSummaryTitle: { fontSize: 14, fontWeight: '500', lineHeight: 20, color: '#1A1A1A' },
   productItem: { flexDirection: 'row', marginTop: 12 },
-  productImageWrapper: { width: 60, height: 60, backgroundColor: '#E0F2F1', borderRadius: 8, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+  productImageWrapper: { width: 60, height: 60, backgroundColor: '#A12702', borderRadius: 8, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
   productImage: { width: 60, height: 60 },
   productInfo: { flex: 1, justifyContent: 'space-between', marginLeft: 12 },
   productName: { fontSize: 14, fontWeight: '500', lineHeight: 20, color: '#1A1A1A', marginBottom: 4 },
@@ -346,8 +346,8 @@ const styles = StyleSheet.create({
   billSummaryContainer: { backgroundColor: '#FFFFFF', marginHorizontal: 16, marginTop: 12, padding: 16, borderRadius: 8 },
   billSummaryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F4F4F4', marginBottom: 12 },
   billSummaryTitle: { fontSize: 14, fontWeight: '500', lineHeight: 20, color: '#1A1A1A' },
-  savedBadge: { backgroundColor: '#E0F2F1', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-  savedText: { fontSize: 12, fontWeight: '500', lineHeight: 16, color: '#00A85A' },
+  savedBadge: { backgroundColor: '#A12702', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  savedText: { fontSize: 12, fontWeight: '500', lineHeight: 16, color: '#A12702' },
   billSummaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   billSummaryLabelRow: { flexDirection: 'row', alignItems: 'center' },
   billSummaryLabel: { fontSize: 12, fontWeight: '400', lineHeight: 16, color: '#828282' },
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   totalBillLabel: { fontSize: 14, fontWeight: '500', lineHeight: 20, color: '#1A1A1A' },
   totalBillValue: { fontSize: 16, fontWeight: '600', lineHeight: 22.4, color: '#1A1A1A' },
   fixedActionsContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingVertical: 12, paddingBottom: 24, borderTopWidth: 1, borderTopColor: '#F4F4F4', shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 5 },
-  orderAgainButton: { backgroundColor: '#034703', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  orderAgainButton: { backgroundColor: '#A12702', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   orderAgainButtonText: { fontSize: 14, fontWeight: '500', lineHeight: 20, color: '#FFFFFF' },
   callHistoryCard: { backgroundColor: '#FFFFFF', marginHorizontal: 16, marginTop: 12, padding: 16, borderRadius: 8 },
   callHistoryTitle: { fontSize: 14, fontWeight: '500', lineHeight: 20, color: '#1A1A1A', marginBottom: 12 },

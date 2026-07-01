@@ -126,13 +126,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: 'rgba(3, 71, 3, 0.3)',
+    borderColor: '#A12702',
     borderRadius: 4,
   },
   changeButtonText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#034703',
+    color: '#A12702',
     lineHeight: 18,
   },
 });

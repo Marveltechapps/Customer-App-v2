@@ -1,4 +1,4 @@
-/** Shared layout + brand constants for login / OTP screens (Selorg Customer green theme). */
+/** Shared layout + brand constants for login / OTP screens (Selorg Customer brand theme). */
 import { Colors } from './Colors';
 
 export const AUTH_BRAND_NAME = 'Selorg Customer';
@@ -8,12 +8,12 @@ export const AUTH_PRIMARY = Colors.primary;
 
 export const AUTH_THEME = {
   primary: AUTH_PRIMARY,
-  headerBg: '#E8F0E8',
-  headerBorder: '#B8D4BA',
+  headerBg: '#FEF9B8',
+  headerBorder: '#E8D447',
   pageBg: Colors.background,
-  primarySoft: '#E8F0E8',
-  primaryMuted: '#9BC49E',
-  primaryLight: '#D9EAD9',
+  primarySoft: '#FEF9B8',
+  primaryMuted: '#D8C536',
+  primaryLight: '#FBF28A',
   legalLink: AUTH_PRIMARY,
   checkboxBorder: '#9CA3AF',
   disabledButton: '#E0E0E0',

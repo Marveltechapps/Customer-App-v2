@@ -27,7 +27,7 @@ const styles = StyleSheet.create({
     borderColor: Theme.colors.primary,
     borderRadius: 4,
     // Inset shadow effect
-    shadowColor: '#011501',
+    shadowColor: '#A12702',
     shadowOffset: {
       width: 3,
       height: 3,

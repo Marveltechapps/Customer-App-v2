@@ -6,7 +6,7 @@ interface CartFilledIconProps {
   size?: number;
 }
 
-export default function CartFilledIcon({ color = '#034703', size = 24 }: CartFilledIconProps) {
+export default function CartFilledIcon({ color = '#A12702', size = 24 }: CartFilledIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path

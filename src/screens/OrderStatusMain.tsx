@@ -296,7 +296,7 @@ const OrderStatusMain: React.FC = () => {
       return (
         <View style={styles.mapContainer}>
           <View style={styles.mapLoadingContainer}>
-            <ActivityIndicator size="small" color="#034703" />
+            <ActivityIndicator size="small" color="#A12702" />
             <Text style={styles.mapLoadingText}>Loading map...</Text>
           </View>
         </View>
@@ -488,7 +488,7 @@ const OrderStatusMain: React.FC = () => {
 
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#034703" />
+            <ActivityIndicator size="small" color="#A12702" />
             <Text style={styles.loadingText}>Loading order...</Text>
           </View>
         ) : error ? (
@@ -711,7 +711,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 20,
-    color: '#034703',
+    color: '#A12702',
   },
   deliveryAddressContainer: {
     flexDirection: 'row',
@@ -729,14 +729,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 4,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#A12702',
     justifyContent: 'center',
     alignItems: 'center',
   },
   storeIconText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#034703',
+    color: '#A12702',
   },
   helpIconContainer: {
     width: 40,
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   retryButton: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     paddingVertical: 10,
     paddingHorizontal: 28,
     borderRadius: 8,
@@ -841,7 +841,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   paymentBannerAction: {
-    backgroundColor: '#034703',
+    backgroundColor: '#A12702',
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 6,
