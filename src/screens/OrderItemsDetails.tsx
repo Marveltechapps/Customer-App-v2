@@ -164,8 +164,8 @@ const OrderItemsDetails: React.FC = () => {
     <html>
     <head><meta charset="utf-8"/><style>
       body{font-family:Helvetica,Arial,sans-serif;color:#1a1a1a;padding:32px;margin:0}
-      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:2px solid #A12702;padding-bottom:16px}
-      .brand{font-size:22px;font-weight:700;color:#A12702}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;border-bottom:2px solid #034703;padding-bottom:16px}
+      .brand{font-size:22px;font-weight:700;color:#034703}
       .inv-label{font-size:12px;color:#6b6b6b;margin-top:4px}
       .inv-num{font-size:16px;font-weight:600}
       .meta{display:flex;justify-content:space-between;margin-bottom:24px}
@@ -177,7 +177,7 @@ const OrderItemsDetails: React.FC = () => {
       td{font-size:13px}
       .summary{width:260px;margin-left:auto}
       .summary-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
-      .summary-row.total{border-top:2px solid #A12702;margin-top:8px;padding-top:8px;font-size:15px;font-weight:700;color:#A12702}
+      .summary-row.total{border-top:2px solid #034703;margin-top:8px;padding-top:8px;font-size:15px;font-weight:700;color:#034703}
       .footer{margin-top:32px;border-top:1px solid #eee;padding-top:12px;font-size:10px;color:#999;text-align:center}
     </style></head>
     <body>
@@ -346,7 +346,7 @@ const OrderItemsDetails: React.FC = () => {
             disabled={invoiceLoading}
           >
             {invoiceLoading ? (
-              <ActivityIndicator size="small" color="#A12702" />
+              <ActivityIndicator size="small" color="#034703" />
             ) : (
               <Text style={styles.invoiceButtonText}>Download Invoice</Text>
             )}
@@ -565,7 +565,8 @@ const styles = StyleSheet.create({
     height: 56, // Exact from Figma layout_KVV7NL
     borderRadius: 8, // Exact from Figma
     overflow: 'hidden',
-    backgroundColor: '#A12702',
+    // Gradient background: linear-gradient(180deg, rgba(224, 242, 241, 1) 0%, rgba(245, 245, 245, 1) 100%)
+    backgroundColor: '#E0F2F1', // Fallback color
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -638,7 +639,7 @@ const styles = StyleSheet.create({
     lineHeight: 20, // 1.4285714285714286em
   },
   savedBadge: {
-    backgroundColor: '#A12702', // Exact from Figma fill_I27OZS
+    backgroundColor: '#D7F1D7', // Exact from Figma fill_I27OZS
     borderRadius: 4,
     paddingHorizontal: 16, // Exact from Figma layout_SVE4LZ
     paddingVertical: 8, // Exact from Figma layout_SVE4LZ
@@ -646,7 +647,7 @@ const styles = StyleSheet.create({
   savedText: {
     fontSize: 12, // Exact from Figma style_Z4HLMA
     fontWeight: '500',
-    color: '#A12702', // Exact from Figma fill_U6IR3Q
+    color: '#2C512C', // Exact from Figma fill_U6IR3Q
     lineHeight: 18, // 1.5em
     textAlignVertical: 'center',
   },
@@ -685,7 +686,7 @@ const styles = StyleSheet.create({
     width: 9, // Exact from Figma layout_X26KY4
     height: 9, // Exact from Figma layout_X26KY4
     borderRadius: 4.5, // Perfect circle
-    backgroundColor: '#A12702', // Exact from Figma fill_0XUKER
+    backgroundColor: '#E0F2F1', // Exact from Figma fill_0XUKER
     justifyContent: 'center',
     alignItems: 'center',
     minWidth: 9,
@@ -757,7 +758,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end', // Exact from Figma layout_GO2OPM
   },
   invoiceButton: {
-    backgroundColor: '#A12702', // Exact from Figma fill_RZQI5Z
+    backgroundColor: '#CDE19A', // Exact from Figma fill_RZQI5Z
     borderRadius: 4,
     paddingVertical: 0,
     paddingHorizontal: 8, // Exact from Figma layout_MHBJ36
@@ -769,7 +770,7 @@ const styles = StyleSheet.create({
   invoiceButtonText: {
     fontSize: 10, // Exact from Figma style_PY5NOE
     fontWeight: '500',
-    color: '#A12702', // Exact from Figma primary
+    color: '#034703', // Exact from Figma primary
     lineHeight: 14, // 1.4em
     textAlignVertical: 'center',
   },
@@ -868,7 +869,7 @@ const styles = StyleSheet.create({
   adjustedNew: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#A12702',
+    color: '#034703',
   },
   helpCard: {
     backgroundColor: '#FFFFFF',

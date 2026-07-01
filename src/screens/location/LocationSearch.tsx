@@ -162,7 +162,7 @@ const LocationSearch: React.FC = () => {
               </View>
               {loading ? (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color="#A12702" />
+                  <ActivityIndicator size="small" color="#034703" />
                 </View>
               ) : savedAddresses.length > 0 ? (
                 <View style={styles.savedAddressesList}>
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     fontSize: 16,
     lineHeight: 24,
-    color: '#A12702',
+    color: '#00A400',
     textAlign: 'left',
   },
   currentLocationMethodContainer: {
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     fontSize: 12,
     lineHeight: 18,
-    color: '#A12702',
+    color: '#00A400',
     textAlign: 'left',
   },
   savedAddressesSection: {
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   defaultBadge: {
-    backgroundColor: '#A12702',
+    backgroundColor: 'rgba(3, 71, 3, 0.08)',
     paddingVertical: 2,
     paddingHorizontal: 6,
     borderRadius: 8,
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '500',
     fontSize: 10,
-    color: '#A12702',
+    color: '#034703',
   },
   savedAddressText: {
     fontFamily: 'Inter',

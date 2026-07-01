@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   dndToggleActive: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   dndToggleThumb: {
     width: 22,
@@ -284,8 +284,8 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   dndTimeChipSelected: {
-    backgroundColor: '#A12702',
-    borderColor: '#A12702',
+    backgroundColor: '#034703',
+    borderColor: '#034703',
   },
   dndTimeChipText: {
     fontSize: 12,

@@ -208,7 +208,7 @@ const SavedAddressesList: React.FC = () => {
         <View style={styles.contentContainer}>
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#A12702" />
+              <ActivityIndicator size="small" color="#034703" />
               <Text style={styles.loadingText}>Loading addresses...</Text>
             </View>
           ) : addresses.length > 0 ? (
@@ -250,7 +250,7 @@ const SavedAddressesList: React.FC = () => {
                   </TouchableOpacity>
                   <View style={styles.actionButtonsContainer}>
                     {selectingId === address._id ? (
-                      <ActivityIndicator size="small" color="#A12702" />
+                      <ActivityIndicator size="small" color="#034703" />
                     ) : (
                       <TouchableOpacity
                         style={[styles.selectButton, address.isDefault && styles.selectButtonActive]}
@@ -277,7 +277,7 @@ const SavedAddressesList: React.FC = () => {
                       activeOpacity={0.7}
                     >
                       {deletingId === address._id ? (
-                        <ActivityIndicator size="small" color="#A12702" />
+                        <ActivityIndicator size="small" color="#034703" />
                       ) : (
                         <Text style={styles.deleteActionButtonText}>Delete</Text>
                       )}
@@ -349,8 +349,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   addressCardSelected: {
-    borderColor: '#A12702',
-    backgroundColor: '#A12702',
+    borderColor: '#034703',
+    backgroundColor: 'rgba(3, 71, 3, 0.02)',
   },
   addressContentTouchable: {
     marginBottom: 16,
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#A12702',
+    borderColor: '#034703',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 2,
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   addressTextContainer: {
     flex: 1,
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   defaultBadge: {
-    backgroundColor: '#A12702',
+    backgroundColor: 'rgba(3, 71, 3, 0.08)',
     paddingVertical: 2,
     paddingHorizontal: 8,
     borderRadius: 10,
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '500',
     fontSize: 10,
-    color: '#A12702',
+    color: '#034703',
   },
   addressContainer: {
     width: '100%',
@@ -434,19 +434,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: '#034703',
     borderRadius: 3.5,
     backgroundColor: 'transparent',
   },
   selectButtonActive: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   selectButtonText: {
     fontFamily: 'Inter',
     fontWeight: '500',
     fontSize: 12,
     lineHeight: 19.2,
-    color: '#A12702',
+    color: '#034703',
     textAlign: 'center',
   },
   selectButtonTextActive: {
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: 'rgba(3, 71, 3, 0.3)',
     borderRadius: 3.5,
   },
   editButtonText: {
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 12,
     lineHeight: 19.2,
-    color: '#A12702',
+    color: '#034703',
     textAlign: 'center',
   },
   deleteActionButton: {
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 12,
     lineHeight: 19.2,
-    color: '#A12702',
+    color: '#034703',
     textAlign: 'center',
   },
   emptyStateContainer: {
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   button: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     borderRadius: 8,
     paddingVertical: 14,
     paddingHorizontal: 12,

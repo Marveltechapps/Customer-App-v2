@@ -1,5 +1,5 @@
 /**
- * Login Screen — Mobile / Email / WhatsApp tabs (Picker-style UI, Customer brand theme)
+ * Login Screen — Mobile / Email / WhatsApp tabs (Picker-style UI, Customer green theme)
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -233,7 +233,7 @@ const Login: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         },
         emailInput: {
           borderWidth: 1,
-          borderColor: '#E8D447',
+          borderColor: '#B8D4BA',
           borderRadius: 12,
           paddingHorizontal: theme.spacing.md,
           paddingVertical: theme.spacing.md + 2,

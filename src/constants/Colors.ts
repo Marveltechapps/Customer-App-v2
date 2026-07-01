@@ -1,9 +1,9 @@
-export const BRAND_ACCENT = '#F3E008';
-export const BRAND_PRIMARY = '#A12702';
-
+/**
+ * Color constants from Figma design
+ */
 export const Colors = {
-  primary: BRAND_PRIMARY,
-  secondary: BRAND_ACCENT,
+  primary: '#034703', // Button green
+  secondary: '#666666', // Secondary button / accent
   background: '#F5F5F5', // Screen background
   cardBackground: '#FFFFFF', // Card background
   text: '#1A1A1A', // Title text

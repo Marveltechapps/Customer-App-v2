@@ -126,14 +126,14 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: '#034703',
     borderRadius: 4,
     backgroundColor: '#FFFFFF',
   },
   addMoreButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#A12702',
+    color: '#034703',
     lineHeight: 20,
   },
 });

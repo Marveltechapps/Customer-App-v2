@@ -44,7 +44,7 @@ const AdminCms = React.lazy(() => import('../screens/admin/cms/CmsScreen'));
 
 const LoadingFallback = () => (
   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' }}>
-    <ActivityIndicator size="large" color="#A12702" />
+    <ActivityIndicator size="large" color="#034703" />
   </View>
 );
 

@@ -270,8 +270,8 @@ const styles = StyleSheet.create({
     minWidth: 100,
   },
   tipButtonSelected: {
-    backgroundColor: '#A12702',
-    borderColor: '#A12702',
+    backgroundColor: '#034703',
+    borderColor: '#034703',
   },
   tipButtonText: {
     fontSize: 14,
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 8,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     alignItems: 'center',
   },
   applyButtonDisabled: {

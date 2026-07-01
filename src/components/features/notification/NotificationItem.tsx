@@ -30,7 +30,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
         <Switch
           value={enabled}
           onValueChange={handleToggle}
-          trackColor={{ false: '#8E8B8B', true: '#A12702' }}
+          trackColor={{ false: '#8E8B8B', true: '#3F723F' }}
           thumbColor="#FFFFFF"
           ios_backgroundColor="#8E8B8B"
         />

@@ -669,7 +669,7 @@ export default function CategoryProducts({
           <View style={styles.productsContainer}>
             {loading && subCategories.length === 0 && !error ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#A12702" />
+                <ActivityIndicator size="large" color="#2D5016" />
                 <Text style={styles.loadingText}>Loading…</Text>
               </View>
             ) : error && subCategories.length === 0 ? (
@@ -690,7 +690,7 @@ export default function CategoryProducts({
 
               {loading ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" color="#A12702" />
+                  <ActivityIndicator size="small" color="#2D5016" />
                 </View>
               ) : null}
 

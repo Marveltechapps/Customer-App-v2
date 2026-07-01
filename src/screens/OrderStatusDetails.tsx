@@ -789,7 +789,7 @@ const styles = StyleSheet.create({
   savingsText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#A12702',
+    color: '#034703',
     lineHeight: 20,
     marginLeft: 0, // No gap between icon and text - they should be touching
   },
@@ -899,7 +899,7 @@ const styles = StyleSheet.create({
   modifyOrderButton: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: '#034703',
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
@@ -908,7 +908,7 @@ const styles = StyleSheet.create({
   modifyOrderButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#A12702',
+    color: '#034703',
     lineHeight: 20,
   },
 });

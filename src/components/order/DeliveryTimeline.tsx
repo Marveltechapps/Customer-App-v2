@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#A12702',
+    backgroundColor: 'rgba(3, 71, 3, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   futureDot: {
     width: 12,
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   connectorActive: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   stepContent: {
     flex: 1,

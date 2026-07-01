@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     minWidth: 80,
     alignItems: 'center',
     justifyContent: 'center',
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   appliedCouponDiscount: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#A12702',
+    color: '#034703',
     lineHeight: 20,
   },
   removeButton: {
@@ -193,12 +193,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: 'rgba(3, 71, 3, 0.3)',
   },
   removeButtonText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#A12702',
+    color: '#034703',
     lineHeight: 18,
   },
   viewAppliedButton: {
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   viewAppliedButtonText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#A12702',
+    color: '#034703',
     lineHeight: 18,
     textDecorationLine: 'underline',
   },

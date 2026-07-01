@@ -104,7 +104,7 @@ const Wallet: React.FC = () => {
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <Header title="Wallet" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#A12702" />
+          <ActivityIndicator size="large" color="#034703" />
           <Text style={styles.loadingText}>Loading wallet...</Text>
         </View>
       </SafeAreaView>
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   balanceAmount: {
     fontSize: 36,
     fontWeight: '700',
-    color: '#A12702',
+    color: '#034703',
   },
   transactionsHeader: {
     paddingHorizontal: 16,
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginRight: 12,
   },
-  txnCredit: { backgroundColor: '#A12702' },
+  txnCredit: { backgroundColor: '#034703' },
   txnDebit: { backgroundColor: '#ED0004' },
   txnInfo: { flex: 1 },
   txnDescription: {
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  txnAmountCredit: { color: '#A12702' },
+  txnAmountCredit: { color: '#034703' },
   txnAmountDebit: { color: '#ED0004' },
   txnBalance: {
     fontSize: 11,

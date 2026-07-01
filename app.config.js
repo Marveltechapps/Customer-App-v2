@@ -110,7 +110,7 @@ const splashImage = "./assets/splash.png";
 
 module.exports = {
   expo: {
-    name: "Sodakku",
+    name: "Selorg",
     slug: "frontend",
     version: "0.0.2",
     jsEngine: "hermes",
@@ -120,7 +120,7 @@ module.exports = {
     splash: {
       image: splashImage,
       resizeMode: "contain",
-      backgroundColor: "#A12702"
+      backgroundColor: "#034703"
     },
     assetBundlePatterns: [
       "**/*"
@@ -188,7 +188,7 @@ module.exports = {
         "expo-notifications",
         {
           icon: "./assets/selorg-logo.png",
-          color: "#A12702"
+          color: "#034703"
         }
       ],
       [

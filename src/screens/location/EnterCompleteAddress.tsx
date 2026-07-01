@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: 'rgba(3, 71, 3, 0.3)',
     borderRadius: 3.5,
   },
   changeButtonText: {
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 12,
     lineHeight: 19.2,
-    color: '#A12702',
+    color: '#034703',
     textAlign: 'center',
   },
   formCard: {
@@ -616,8 +616,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   labelButtonActive: {
-    backgroundColor: '#A12702',
-    borderColor: '#A12702',
+    backgroundColor: 'rgba(3, 71, 3, 0.1)',
+    borderColor: '#034703',
   },
   labelButtonText: {
     fontFamily: 'Inter',
@@ -628,7 +628,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   labelButtonTextActive: {
-    color: '#A12702',
+    color: '#034703',
   },
   defaultCheckboxContainer: {
     flexDirection: 'row',
@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#A12702',
+    borderColor: '#034703',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -656,7 +656,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 2,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   defaultCheckboxText: {
     fontFamily: 'Inter',
@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
   saveButton: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     borderRadius: 8,
     paddingVertical: 14,
     paddingHorizontal: 12,

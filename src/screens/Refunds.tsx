@@ -55,7 +55,7 @@ const Refunds: React.FC = () => {
     const getStatusBadgeStyle = () => {
       switch (item.status) {
         case 'completed':
-          return { backgroundColor: '#A12702', color: '#A12702' };
+          return { backgroundColor: '#D7F1D7', color: '#2C512C' };
         case 'pending':
           return { backgroundColor: '#FFF4E6', color: '#8B6914' };
         case 'rejected':
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 3.5,
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: 'rgba(3, 71, 3, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 12,
     lineHeight: 19.2, // 1.6000000635782878em
-    color: '#A12702',
+    color: '#034703',
     textAlign: 'center',
   },
   separator: {

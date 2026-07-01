@@ -232,7 +232,7 @@ const appStyles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   errorContainer: {
     flex: 1,

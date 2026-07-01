@@ -7,7 +7,7 @@ interface CenterButtonIconProps {
   height?: number;
 }
 
-export default function CenterButtonIcon({ color = '#A12702', width = 36, height = 7.11 }: CenterButtonIconProps) {
+export default function CenterButtonIcon({ color = '#034703', width = 36, height = 7.11 }: CenterButtonIconProps) {
   return (
     <Svg width={width} height={height} viewBox="0 0 36 7.11" fill="none">
       <Path

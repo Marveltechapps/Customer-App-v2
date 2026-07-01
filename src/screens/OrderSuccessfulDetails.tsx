@@ -133,7 +133,7 @@ const OrderSuccessfulDetails: React.FC = () => {
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <Header title="Order Details" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#A12702" />
+          <ActivityIndicator size="large" color="#034703" />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
   arrivedInTimeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#A12702',
+    backgroundColor: '#E0F2F1',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 2,
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     lineHeight: 16,
-    color: '#A12702',
+    color: '#00A85A',
     marginLeft: 4,
   },
   timelineContainer: {
@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
   productImageWrapper: {
     width: 60,
     height: 60,
-    backgroundColor: '#A12702',
+    backgroundColor: '#E0F2F1',
     borderRadius: 8,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
   savedBadge: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#E0F2F1',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     lineHeight: 16,
-    color: '#A12702',
+    color: '#00A85A',
   },
   billSummaryRow: {
     flexDirection: 'row',
@@ -689,7 +689,7 @@ const styles = StyleSheet.create({
   },
   rateOrderButton: {
     flex: 1,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     paddingVertical: 14,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -707,7 +707,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: '#034703',
     paddingVertical: 14,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -718,7 +718,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     lineHeight: 20,
-    color: '#A12702',
+    color: '#034703',
   },
   callHistoryCard: {
     backgroundColor: '#FFFFFF',

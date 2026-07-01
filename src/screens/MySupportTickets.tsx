@@ -32,7 +32,7 @@ const STATUS_COLOR: Record<string, string> = {
   open: '#2563EB',
   in_progress: '#7C3AED',
   waiting_for_customer: '#D97706',
-  resolved: '#A12702',
+  resolved: '#059669',
   closed: '#6B7280',
 };
 

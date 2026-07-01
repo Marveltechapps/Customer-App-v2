@@ -566,7 +566,7 @@ const Payment: React.FC = () => {
           {paymentUiState === 'pending_verification' || paymentUiState === 'unknown' ? (
             <Text style={styles.pendingIcon}>!</Text>
           ) : (
-            <ActivityIndicator size="large" color="#A12702" />
+            <ActivityIndicator size="large" color="#034703" />
           )}
           <Text style={styles.statusTitle}>{title}</Text>
           <Text style={styles.statusSubtitle}>{subtitle}</Text>
@@ -768,7 +768,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   retryBtn: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
@@ -817,7 +817,7 @@ const styles = StyleSheet.create({
   summaryAmount: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#A12702',
+    color: '#3F723F',
     lineHeight: 28,
   },
   summaryDivider: {
@@ -834,7 +834,7 @@ const styles = StyleSheet.create({
   couponBadge: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#A12702',
+    color: '#3F723F',
     lineHeight: 18,
   },
   couponRow: {
@@ -850,12 +850,12 @@ const styles = StyleSheet.create({
   couponDiscountValue: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#A12702',
+    color: '#00A85A',
   },
   haveCouponLink: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#A12702',
+    color: '#034703',
     textDecorationLine: 'underline',
   },
 
@@ -878,8 +878,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   methodWrapperSelected: {
-    borderColor: '#A12702',
-    backgroundColor: '#A12702',
+    borderColor: '#034703',
+    backgroundColor: 'rgba(3, 71, 3, 0.02)',
   },
   methodCard: {
     paddingVertical: 12,
@@ -900,13 +900,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   radioSelected: {
-    borderColor: '#A12702',
+    borderColor: '#034703',
   },
   radioInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   methodInfo: {
     flex: 1,
@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
   },
   methodLabelSelected: {
     fontWeight: '600',
-    color: '#A12702',
+    color: '#034703',
   },
   methodDescription: {
     fontSize: 12,
@@ -930,7 +930,7 @@ const styles = StyleSheet.create({
   },
 
   infoCard: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#E0F2F1',
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -967,7 +967,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   placeOrderButton: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
@@ -1035,7 +1035,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -1048,7 +1048,7 @@ const styles = StyleSheet.create({
   successTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#A12702',
+    color: '#034703',
     lineHeight: 32,
   },
   successSubtitle: {

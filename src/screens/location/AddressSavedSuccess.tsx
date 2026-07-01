@@ -167,11 +167,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: '#034703',
     borderRadius: 4,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    backgroundColor: '#A12702',
+    backgroundColor: 'rgba(1, 21, 1, 0.05)',
     // Note: React Native doesn't support inset shadows natively
     // The inset shadow effect is approximated with the background color
   },
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 16,
     lineHeight: 24, // 1.5em = 24px
-    color: '#A12702',
+    color: '#034703',
     textAlign: 'center', // Center aligned (Figma shows left but visually centered due to justifyContent: center)
   },
 });

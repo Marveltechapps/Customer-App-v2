@@ -90,10 +90,10 @@ const timelineStyles = StyleSheet.create({
   stepCol: { alignItems: 'center', flex: 1 },
   dotRow: { flexDirection: 'row', alignItems: 'center', width: '100%', justifyContent: 'center' },
   dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#D1D1D1' },
-  dotCompleted: { backgroundColor: '#A12702' },
-  dotCurrent: { backgroundColor: '#A12702', borderWidth: 2, borderColor: '#A12702' },
+  dotCompleted: { backgroundColor: '#034703' },
+  dotCurrent: { backgroundColor: '#034703', borderWidth: 2, borderColor: '#D7F1D7' },
   hConnector: { flex: 1, height: 2, backgroundColor: '#D1D1D1' },
-  hConnectorActive: { backgroundColor: '#A12702' },
+  hConnectorActive: { backgroundColor: '#034703' },
   label: { fontSize: 10, fontWeight: '400', color: '#828282', marginTop: 4, textAlign: 'center' },
   labelActive: { color: '#1A1A1A', fontWeight: '500' },
   rejectedBadge: { alignSelf: 'center', backgroundColor: '#FDEAEA', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 4, marginTop: 8 },
@@ -130,12 +130,12 @@ const RefundDetailsScreen: React.FC = () => {
   }, [loadRefundDetails]);
 
   const getStatusButtonStyle = () => {
-    if (!refundDetails) return { backgroundColor: '#A12702', text: 'Completed' };
+    if (!refundDetails) return { backgroundColor: '#034703', text: 'Completed' };
     switch (refundDetails.status) {
-      case 'completed': return { backgroundColor: '#A12702', text: 'Completed' };
+      case 'completed': return { backgroundColor: '#034703', text: 'Completed' };
       case 'rejected': return { backgroundColor: '#ED0004', text: 'Rejected' };
       case 'pending': return { backgroundColor: '#F59E0B', text: 'Pending' };
-      default: return { backgroundColor: '#A12702', text: 'Completed' };
+      default: return { backgroundColor: '#034703', text: 'Completed' };
     }
   };
 
@@ -281,8 +281,8 @@ const styles = StyleSheet.create({
   timelineTitle: { fontSize: 14, fontWeight: '500', lineHeight: 20, color: '#1A1A1A', marginBottom: 8 },
   productCard: { backgroundColor: '#FFFFFF', borderRadius: 8, padding: 12, paddingBottom: 16, gap: 12, width: '100%', alignSelf: 'stretch' },
   productHeader: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, alignSelf: 'stretch' },
-  productImageContainer: { width: 56, height: 56, borderRadius: 8, overflow: 'hidden', backgroundColor: '#A12702', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
-  productImagePlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#A12702' },
+  productImageContainer: { width: 56, height: 56, borderRadius: 8, overflow: 'hidden', backgroundColor: '#E0F2F1', shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
+  productImagePlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#E0F2F1' },
   productImageText: { fontSize: 10, color: '#6B6B6B' },
   productInfo: { flex: 1, gap: 8 },
   productDetails: { gap: 4 },

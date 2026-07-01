@@ -185,7 +185,7 @@ const MapAddressPin: React.FC = () => {
           <Header title={headerTitle} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#A12702" />
+          <ActivityIndicator size="large" color="#034703" />
           <Text style={styles.loadingText}>Getting your location...</Text>
         </View>
       </SafeAreaView>
@@ -320,12 +320,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '400',
     fontSize: 14,
-    color: '#A12702',
+    color: '#034703',
     textAlign: 'center',
     paddingHorizontal: 32,
   },
   retryButton: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 24,
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     borderWidth: 3,
     borderColor: '#FFFFFF',
     shadowColor: '#000',
@@ -361,14 +361,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 10,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#A12702',
+    borderTopColor: '#034703',
     marginTop: -2,
   },
   infoCard: {
     position: 'absolute',
     top: 20,
     alignSelf: 'center',
-    backgroundColor: '#A12702',
+    backgroundColor: '#007D00',
     borderRadius: 10.5,
     padding: 12,
     shadowColor: '#000',
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 8,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#A12702',
+    borderTopColor: '#034703',
     marginTop: -1,
   },
   locationTextContainer: {
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   confirmButton: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     borderRadius: 8,
     paddingVertical: 14,
     paddingHorizontal: 12,

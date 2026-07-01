@@ -271,7 +271,7 @@ const MyOrders: React.FC = () => {
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <Header title="My Orders" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#A12702" />
+          <ActivityIndicator size="large" color="#034703" />
           <Text style={styles.loadingText}>Loading orders...</Text>
         </View>
       </SafeAreaView>
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   filterButtonActive: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   filterText: {
     fontSize: 14,
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
   productImageWrapper: {
     width: 40,
     height: 40,
-    backgroundColor: '#A12702',
+    backgroundColor: '#E0F2F1',
     borderRadius: 4,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   },
   refundBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#A12702',
+    backgroundColor: '#D7F1D7',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     lineHeight: 18,
-    color: '#A12702',
+    color: '#2C512C',
   },
   inProgressBadge: {
     alignSelf: 'flex-start',

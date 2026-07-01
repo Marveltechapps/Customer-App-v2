@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     height: 8,
   },
   activeDot: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   inactiveDot: {
     width: 8,

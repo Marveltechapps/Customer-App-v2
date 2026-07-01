@@ -34,7 +34,7 @@ export default function BottomNavigationBar({
         >
           <View style={styles.tabContent}>
             {activeTab === 'home' ? (
-              <HomeFilledIcon color="#A12702" size={24} />
+              <HomeFilledIcon color="#034703" size={24} />
             ) : (
               <HomeOutlinedIcon color="#0C0C0C" size={24} />
             )}
@@ -57,7 +57,7 @@ export default function BottomNavigationBar({
         >
           <View style={styles.shopTabContent}>
             {activeTab === 'shop' ? (
-              <ShopFilledIcon color="#A12702" size={24} />
+              <ShopFilledIcon color="#034703" size={24} />
             ) : (
               <ShopOutlinedIcon color="#0C0C0C" size={24} />
             )}
@@ -81,7 +81,7 @@ export default function BottomNavigationBar({
         >
           <View style={styles.cartTabContent}>
             {activeTab === 'cart' ? (
-              <CartFilledIcon color="#A12702" size={24} />
+              <CartFilledIcon color="#034703" size={24} />
             ) : (
               <CartOutlinedIcon color="#0C0C0C" size={24} />
             )}
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   },
   activeTabText: {
     fontWeight: '600',
-    color: '#A12702',
+    color: '#034703',
   },
   inactiveTabText: {
     fontWeight: '400',

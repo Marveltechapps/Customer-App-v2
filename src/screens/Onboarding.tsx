@@ -497,7 +497,7 @@ function Onboarding({ onComplete }: OnboardingProps) {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#A12702" />
+          <ActivityIndicator size="large" color="#034703" />
         </View>
       </SafeAreaView>
     );
@@ -524,7 +524,7 @@ function Onboarding({ onComplete }: OnboardingProps) {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#A12702" />
+          <ActivityIndicator size="large" color="#034703" />
         </View>
       </SafeAreaView>
     );
@@ -874,7 +874,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8E8E8',
   },
   paginationDotActive: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
   },
   buttonContainer: {
     width: '100%',
@@ -885,7 +885,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     borderRadius: scale(8),
     gap: scale(6),
     minHeight: verticalScale(48),

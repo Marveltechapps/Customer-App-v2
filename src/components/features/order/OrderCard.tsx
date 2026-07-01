@@ -22,7 +22,7 @@ interface OrderCardProps {
 
 export default function OrderCard({ order }: OrderCardProps) {
   const statusText = order.status === 'delivered' ? 'Order Delivered' : 'Order Cancelled';
-  const statusColor = order.status === 'delivered' ? '#A12702' : '#D7263D';
+  const statusColor = order.status === 'delivered' ? '#00A85A' : '#D7263D';
 
   return (
     <View style={styles.outerContainer}>
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 4,
-    backgroundColor: '#A12702',
+    backgroundColor: '#E0F2F1',
     justifyContent: 'center',
     alignItems: 'center',
     // Shadow
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   imagePlaceholder: {
     width: 40,
     height: 40,
-    backgroundColor: '#A12702',
+    backgroundColor: '#E0F2F1',
     borderRadius: 4,
   },
   productImage: {
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   },
   refundBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#A12702',
+    backgroundColor: '#D7F1D7',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     lineHeight: 18,
-    color: '#A12702',
+    color: '#2C512C',
     fontFamily: 'Inter',
   },
   actionButton: {

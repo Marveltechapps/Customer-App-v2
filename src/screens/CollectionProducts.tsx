@@ -72,7 +72,7 @@ export default function CollectionProducts() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#A12702" />
+        <ActivityIndicator size="large" color="#034703" />
       </View>
     );
   }
@@ -119,6 +119,6 @@ const styles = StyleSheet.create({
   cardWrap: { width: '50%', padding: 6 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
   errorText: { color: '#666', fontSize: 14, marginBottom: 16 },
-  backBtn: { padding: 12, backgroundColor: '#A12702', borderRadius: 8 },
+  backBtn: { padding: 12, backgroundColor: '#034703', borderRadius: 8 },
   backBtnText: { color: '#FFF', fontSize: 14 },
 });

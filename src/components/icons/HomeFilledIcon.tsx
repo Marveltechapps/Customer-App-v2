@@ -6,7 +6,7 @@ interface HomeFilledIconProps {
   size?: number;
 }
 
-export default function HomeFilledIcon({ color = '#A12702', size = 24 }: HomeFilledIconProps) {
+export default function HomeFilledIcon({ color = '#034703', size = 24 }: HomeFilledIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path

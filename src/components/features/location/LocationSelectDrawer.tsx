@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
   },
   addressCardSelected: {
     borderColor: Colors.primary,
-    backgroundColor: '#A12702',
+    backgroundColor: '#F0FFF0',
   },
   addressRow: {
     flexDirection: 'row',

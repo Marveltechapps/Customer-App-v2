@@ -96,10 +96,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, justifyContent: 'center' },
   title: { fontSize: 20, fontWeight: '600', marginBottom: 12 },
   input: { borderWidth: 1, borderColor: '#ddd', padding: 12, borderRadius: 8, marginBottom: 12 },
-  button: { backgroundColor: '#A12702', padding: 12, borderRadius: 8, alignItems: 'center' },
+  button: { backgroundColor: '#034703', padding: 12, borderRadius: 8, alignItems: 'center' },
   btnText: { color: '#fff', fontWeight: '600' },
   link: { marginTop: 8, alignItems: 'center' },
-  linkText: { color: '#A12702' },
+  linkText: { color: '#034703' },
   message: { marginTop: 12, color: '#666', textAlign: 'center' },
 });
 

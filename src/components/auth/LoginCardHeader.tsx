@@ -8,7 +8,7 @@ interface LoginCardHeaderProps {
   width: number;
 }
 
-/** Brand header band with organic wave bottom — pinned to top of login screen. */
+/** Green header band with organic wave bottom — pinned to top of login screen. */
 export default function LoginCardHeader({ width }: LoginCardHeaderProps) {
   const insets = useSafeAreaInsets();
   const waveHeight = 22;

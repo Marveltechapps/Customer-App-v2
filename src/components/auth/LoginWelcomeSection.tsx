@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 
 const selorgLogo = require('../../../assets/selorg-logo.png');
 
-/** Logo + welcome copy shown between the brand header and login form card. */
+/** Logo + welcome copy shown between the green header and login form card. */
 export default function LoginWelcomeSection() {
   const styles = useMemo(
     () =>
@@ -17,9 +17,9 @@ export default function LoginWelcomeSection() {
           width: 72,
           height: 72,
           borderRadius: 36,
-          backgroundColor: '#FEF9B8',
+          backgroundColor: '#E8F0E8',
           borderWidth: 2,
-          borderColor: '#E8D447',
+          borderColor: '#B8D4BA',
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: 14,

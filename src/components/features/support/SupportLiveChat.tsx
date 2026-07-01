@@ -182,7 +182,7 @@ const SupportLiveChat: React.FC<SupportLiveChatProps> = ({ headerTitle, ticket }
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#A12702" />
+            <ActivityIndicator size="large" color="#034703" />
             <Text style={styles.loadingText}>Connecting to support...</Text>
           </View>
         ) : initError && messages.length === 0 ? (
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 },
   errorText: { fontSize: 14, color: '#828282', textAlign: 'center' },
   retryButton: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     borderRadius: 20,
     paddingHorizontal: 24,
     paddingVertical: 10,
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   agentRow: { alignItems: 'flex-start' },
   agentLabel: { fontSize: 11, color: '#828282', marginBottom: 4, marginLeft: 4 },
   messageBubble: { maxWidth: '85%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16 },
-  customerBubble: { backgroundColor: '#A12702', borderBottomRightRadius: 4 },
+  customerBubble: { backgroundColor: '#034703', borderBottomRightRadius: 4 },
   agentBubble: { backgroundColor: '#FFFFFF', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#E8E8E8' },
   messageText: { fontSize: 14, lineHeight: 20 },
   customerText: { color: '#FFFFFF' },
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
   sendButton: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     borderRadius: 20,
     paddingHorizontal: 20,
     paddingVertical: 10,

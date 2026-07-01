@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     lineHeight: 20,
-    color: '#A12702',
+    color: '#034703',
   },
   helpItemWrapper: {
     marginBottom: 5,

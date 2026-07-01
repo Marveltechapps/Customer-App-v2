@@ -664,7 +664,7 @@ const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
                               // Animated border color only when no error (JS-driven)
                               borderColor: inputBorderColors[index].interpolate({
                                 inputRange: [0, 1],
-                                outputRange: ['#D1D1D1', '#A12702'], // From default to focus color
+                                outputRange: ['#D1D1D1', '#034703'], // From default to focus color
                               }),
                             },
                           ]}
@@ -851,7 +851,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '600',
     textAlign: 'center',
-    color: '#A12702',
+    color: '#034703',
   },
   resendRow: {
     alignItems: 'center',
@@ -861,7 +861,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '500',
     textAlign: 'center',
-    color: '#A12702',
+    color: '#034703',
     textDecorationLine: 'underline',
   },
   otpContainer: {
@@ -919,7 +919,7 @@ const styles = StyleSheet.create({
   },
   verifyButton: {
     width: '100%',
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',

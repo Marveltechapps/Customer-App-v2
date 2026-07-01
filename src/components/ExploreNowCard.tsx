@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
   placeholderBackground: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     position: 'absolute',
   },
   overlay: {

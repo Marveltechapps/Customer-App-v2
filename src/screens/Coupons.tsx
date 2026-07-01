@@ -160,7 +160,7 @@ const Coupons: React.FC = () => {
               <View style={styles.dividerLine} />
             </View>
             
-            {loading && <ActivityIndicator size="large" color="#A12702" style={{ marginTop: 20 }} />}
+            {loading && <ActivityIndicator size="large" color="#034703" style={{ marginTop: 20 }} />}
           </View>
         }
         renderItem={({ item: coupon }) => {
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
   },
   applyButton: {
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: '#034703',
     borderRadius: 4,
     paddingVertical: 4,
     paddingHorizontal: 8,
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
   applyButtonText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#A12702',
+    color: '#034703',
     lineHeight: 18,
   },
   couponsListSection: {
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   couponCode: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#A12702',
+    color: '#034703',
     lineHeight: 16,
   },
   expiryBadge: {
@@ -418,9 +418,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   couponApplyButton: {
-    backgroundColor: '#A12702',
+    backgroundColor: '#034703',
     borderWidth: 1,
-    borderColor: '#A12702',
+    borderColor: '#013701',
     borderRadius: 4,
     paddingVertical: 6,
     paddingHorizontal: 12,
@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
   readMoreText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#A12702',
+    color: '#034703',
     lineHeight: 16,
   },
 });
