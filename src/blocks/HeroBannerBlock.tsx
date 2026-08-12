@@ -9,18 +9,21 @@ function normalizeBanners(raw: unknown[]): Record<string, unknown>[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((b: any) => {
     const out: Record<string, unknown> = {
-    uri: getProductImageUrl({
-      imageUrl: pickBannerRawImageUrl(b),
-      id: String(b._id ?? b.id ?? ''),
-      name: b.title,
-    }),
-    imageUrl: b.imageUrl,
-    videoUrl: b.videoUrl,
-    link: b.link,
-    redirectType: b.redirectType,
-    redirectValue: b.redirectValue,
-    _id: b._id,
-    title: b.title,
+      uri: getProductImageUrl({
+        imageUrl: pickBannerRawImageUrl(b),
+        id: String(b._id ?? b.id ?? ''),
+        name: b.title,
+      }),
+      imageUrl: b.imageUrl,
+      videoUrl: b.videoUrl,
+      link: b.link,
+      redirectType: b.redirectType,
+      redirectValue: b.redirectValue,
+      _id: b._id,
+      title: b.title,
+      aspectRatio: b.aspectRatio,
+      contentFit: b.contentFit,
+      dimensions: b.dimensions,
     };
     // Preserve legacy default behavior: omit the field when backend doesn't send it.
     if (b && (b.isNavigable === true || b.isNavigable === false || b.isNavigable === null)) {

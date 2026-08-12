@@ -9,7 +9,7 @@ import SearchIcon from '../components/icons/SearchIcon';
 import Text from '../components/common/Text';
 import CategoryCard from '../components/CategoryCard';
 import FloatingCartBar from '../components/features/cart/FloatingCartBar';
-import { useDimensions, getSpacing, scale } from '../utils/responsive';
+import { useResponsive, getGridMetrics, scaleFont, Spacing } from '../utils/responsive';
 import { logger } from '@/utils/logger';
 import type { CategoryGroup, CategoryListItem } from '../utils/catalogCacheLoaders';
 
@@ -28,13 +28,17 @@ export default function CategoriesScreen({
   const { categoryGroups: cachedCategoryGroups, categoriesLoading, ensureCatalogLoaded } = useCatalogCache();
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const loading = categoriesLoading && (!cachedCategoryGroups || cachedCategoryGroups.length === 0);
-  
-  // Calculate responsive card width for 3-column grid
-  const { width: screenWidth } = useDimensions();
-  const containerPadding = getSpacing(16) * 2; // Left and right padding
-  const gapBetweenCards = getSpacing(16); // Gap between cards in a row
-  const totalGaps = gapBetweenCards * 2; // 2 gaps for 3 cards
-  const cardWidth = (screenWidth - containerPadding - totalGaps) / 3;
+
+  const { width: screenWidth } = useResponsive();
+  const grid = getGridMetrics(screenWidth, {
+    gap: 16,
+    horizontalPadding: 16,
+    preferredCardWidth: 110,
+  });
+  const columns = grid.columns;
+  const cardWidth = grid.cardWidth;
+  const titleFontSize = scaleFont(20, 18, 24);
+  const groupTitleFontSize = scaleFont(16, 14, 18);
 
   // Animation for header
   const headerOpacity = useRef(new Animated.Value(0)).current;
@@ -161,7 +165,9 @@ export default function CategoriesScreen({
         >
           {/* Title Container */}
           <View style={styles.titleContainer}>
-            <Text style={styles.title}>All Categories</Text>
+            <Text style={[styles.title, { fontSize: titleFontSize, lineHeight: Math.round(titleFontSize * 1.4) }]}>
+              All Categories
+            </Text>
           </View>
 
           {/* Search Button */}
@@ -189,15 +195,15 @@ export default function CategoriesScreen({
           <>
           {/* Category Groups */}
           {categoryGroups.map((group, groupIndex) => {
-            // Group categories into rows of 3
+            // Dynamic columns based on screen width (phones 3, tablets 4–6+)
             const rows: CategoryListItem[][] = [];
-            for (let i = 0; i < group.categories.length; i += 3) {
-              rows.push(group.categories.slice(i, i + 3));
+            for (let i = 0; i < group.categories.length; i += columns) {
+              rows.push(group.categories.slice(i, i + columns));
             }
 
-            const groupRowCount = Math.max(1, Math.ceil(group.categories.length / 3));
-            const dynamicGroupPaddingVertical = groupRowCount <= 1 ? 12 : 20;
-            const dynamicGroupGap = groupRowCount <= 1 ? 12 : 16;
+            const groupRowCount = Math.max(1, Math.ceil(group.categories.length / columns));
+            const dynamicGroupPaddingVertical = groupRowCount <= 1 ? Spacing.md() : Spacing.xl();
+            const dynamicGroupGap = groupRowCount <= 1 ? Spacing.md() : Spacing.lg();
 
             // Calculate starting card index for this group
             let cardIndex = 0;
@@ -211,6 +217,7 @@ export default function CategoriesScreen({
                 style={[
                   styles.categoryGroup,
                   {
+                    paddingHorizontal: grid.horizontalPadding,
                     paddingVertical: dynamicGroupPaddingVertical,
                     gap: dynamicGroupGap,
                   },
@@ -219,7 +226,17 @@ export default function CategoriesScreen({
                 {/* Header Container */}
                 <View style={styles.headerContainer}>
                   <View style={styles.groupTitleContainer}>
-                    <Text style={styles.groupTitle}>{group.title}</Text>
+                    <Text
+                      style={[
+                        styles.groupTitle,
+                        {
+                          fontSize: groupTitleFontSize,
+                          lineHeight: Math.round(groupTitleFontSize * 1.5),
+                        },
+                      ]}
+                    >
+                      {group.title}
+                    </Text>
                   </View>
                   <View style={styles.dividerContainer}>
                     <LinearGradient
@@ -232,11 +249,12 @@ export default function CategoriesScreen({
                 </View>
 
                 {/* Category Container */}
-                <View style={styles.categoriesContainer}>
+                <View style={[styles.categoriesContainer, { gap: Spacing.xxl() }]}>
                   {rows.map((row, rowIndex) => (
-                    <View key={rowIndex} style={styles.row}>
+                    <View key={rowIndex} style={[styles.row, { gap: grid.gap }]}>
                       {row.map((category, categoryIndexInRow) => {
-                        const currentCardIndex = cardIndex + rowIndex * 3 + categoryIndexInRow;
+                        const currentCardIndex =
+                          cardIndex + rowIndex * columns + categoryIndexInRow;
                         const anim = cardAnimations[currentCardIndex] ?? cardAnimations[0];
                         return (
                           <Animated.View
@@ -255,10 +273,13 @@ export default function CategoriesScreen({
                           </Animated.View>
                         );
                       })}
-                      {/* Fill remaining slots if row has less than 3 items */}
-                      {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, index) => (
-                        <View key={`spacer-${index}`} style={[styles.spacer, { width: cardWidth }]} />
-                      ))}
+                      {row.length < columns &&
+                        Array.from({ length: columns - row.length }).map((_, index) => (
+                          <View
+                            key={`spacer-${index}`}
+                            style={[styles.spacer, { width: cardWidth }]}
+                          />
+                        ))}
                     </View>
                   ))}
                 </View>
@@ -299,9 +320,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: 'Inter',
-    fontSize: 20,
     fontWeight: '700',
-    lineHeight: 28, // 1.4 * 20
     color: '#1A1A1A',
     textAlign: 'left',
   },
@@ -334,14 +353,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 80, // Add padding to prevent content from being hidden behind bottom nav
+    paddingBottom: 80,
     paddingTop: 0,
     gap: 0,
   },
   categoryGroup: {
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    gap: 16,
     alignSelf: 'stretch',
     marginBottom: 0,
   },
@@ -352,34 +368,31 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   groupTitleContainer: {
-    flexShrink: 0,
+    flexShrink: 1,
+    maxWidth: '55%',
   },
   groupTitle: {
     fontFamily: 'Inter',
-    fontSize: 16,
     fontWeight: '500',
-    lineHeight: 24, // 1.5 * 16
     color: '#222222',
   },
   dividerContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'stretch',
+    minWidth: 24,
   },
   divider: {
     width: '100%',
     height: 1,
   },
   categoriesContainer: {
-    gap: 24, // Gap between rows
+    width: '100%',
   },
   row: {
     flexDirection: 'row',
-    gap: 16, // Gap between cards
     width: '100%',
   },
-  spacer: {
-    // Width will be set dynamically via inline style
-  },
+  spacer: {},
 });
 

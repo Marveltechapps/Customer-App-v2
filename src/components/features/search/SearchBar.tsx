@@ -65,11 +65,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D1D1D1',
     borderRadius: 8.5,
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     gap: 8,
     minHeight: 48,
-    height: 48,
+    width: '100%',
   },
   searchIconContainer: {
     width: 20,

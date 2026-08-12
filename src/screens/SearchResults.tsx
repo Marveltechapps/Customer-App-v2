@@ -20,6 +20,7 @@ import {
   fetchModalVariantsForProduct,
 } from '../utils/productVariants';
 import { formatProductDiscountLabel, resolveProductOriginalPrice } from '../utils/productPricing';
+import { useResponsive } from '@/utils/responsive';
 
 interface SearchResultsScreenProps {
   fetchProducts?: (query: string) => Promise<Product[]>;
@@ -34,6 +35,7 @@ export default function SearchResultsScreen({
 }: SearchResultsScreenProps) {
   const navigation = useNavigation<RootStackNavigationProp>();
   const route = useRoute<RootStackRouteProp<'SearchResults'>>();
+  const { productCardWidth, isTablet, scaleFont: rFont } = useResponsive();
   const params = route.params || {};
   const [searchText, setSearchText] = useState(params.query || '');
   const [products, setProducts] = useState<Product[]>([]);
@@ -181,7 +183,7 @@ export default function SearchResultsScreen({
           showsVerticalScrollIndicator={false}
         >
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, isTablet && styles.headerTablet]}>
             {/* Top Container - Search and Results Text */}
             <View style={styles.headerTop}>
               {/* Search Container */}
@@ -198,7 +200,7 @@ export default function SearchResultsScreen({
                 {/* Text Input */}
                 <View style={styles.textInputContainer}>
                   <TextInput
-                    style={styles.searchInput}
+                    style={[styles.searchInput, { fontSize: rFont(14, 13, 17) }]}
                     placeholder="Search products..."
                     placeholderTextColor="#828282"
                     value={searchText}
@@ -226,7 +228,7 @@ export default function SearchResultsScreen({
               {/* Results Header */}
               {searchText.trim().length > 0 && (
                 <View style={styles.resultsHeader}>
-                  <Text style={styles.resultsHeaderText}>
+                  <Text style={[styles.resultsHeaderText, { fontSize: rFont(12, 11, 15) }]}>
                     Showing results of "{searchText}"
                   </Text>
                 </View>
@@ -257,6 +259,7 @@ export default function SearchResultsScreen({
                     >
                       <ProductCard
                         product={product}
+                        width={productCardWidth}
                         onQuantityPress={handleQuantityPress}
                         onAddPress={handleAddPress}
                         onCardPress={(productId) => {
@@ -321,6 +324,10 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     gap: 24,
     alignItems: 'center',
+  },
+  headerTablet: {
+    maxWidth: 720,
+    alignSelf: 'center',
   },
   headerTop: {
     width: '100%',

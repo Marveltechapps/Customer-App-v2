@@ -10,230 +10,92 @@ import {
   PanResponder,
   Easing,
   Platform,
-  ActivityIndicator,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { getOnboardingPages, completeOnboarding, type OnboardingPage } from '../services/onboarding/onboardingService';
+import SkipButton from '@/components/common/SkipButton';
+import { completeOnboarding } from '../services/onboarding/onboardingService';
 import { tokenManager } from '../services/api/tokenManager';
-import { saveOnboardingCompleted } from '../utils/storage';
-import { getEnvConfigSafe } from '../config/env';
+import {
+  getOnboardingCompleted,
+  saveOnboardingCompleted,
+} from '../utils/storage';
 import { logger } from '@/utils/logger';
-import { navigateToLoginScreen } from '../utils/navigationRef';
-import { scale, verticalScale, getSpacing, useDimensions, scaleFont } from '../utils/responsive';
-
-// Static image mapping - Required because React Native doesn't support dynamic require()
-const ONBOARDING_IMAGES: { [key: number]: any } = {
-  1: require('../assets/images/onboarding-screen-1.png'),
-  2: require('../assets/images/onboarding-screen-2.png'),
-  3: require('../assets/images/onboarding-screen-3.png'),
-};
-
-// Helper function to get onboarding image
-const getOnboardingImage = (pageNumber: number) => {
-  return ONBOARDING_IMAGES[pageNumber] || ONBOARDING_IMAGES[1]; // Default to page 1 if not found
-};
+import { scale, verticalScale, getSpacing, scaleFont } from '../utils/responsive';
+import {
+  LOCAL_ONBOARDING_PAGES,
+  type LocalOnboardingPage,
+} from '../constants/onboarding';
+import { Colors } from '../constants/Colors';
+import { APP_LAUNCH_ID } from '../constants/appLaunch';
 
 interface OnboardingProps {
   onComplete?: () => void;
 }
 
 /**
- * Onboarding Component
- * Single component that displays all onboarding pages
- * Only image, title, and description change between pages
- * Balance/layout remains the same
+ * Onboarding — 3 final screens (local assets).
+ * Swipe, pagination, Skip, Next, and Get Started preserved.
  */
 function Onboarding({ onComplete }: OnboardingProps) {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { width: responsiveWidth } = useDimensions();
-  const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [onboardingPages, setOnboardingPages] = useState<OnboardingPage[]>([]);
-  const [fetchingPages, setFetchingPages] = useState<boolean>(true);
-  const fallbackNavigateRef = useRef(false);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [loading, setLoading] = useState(false);
+  /** null = still checking; false = new user (show); true = returning (redirect) */
+  const [gateChecked, setGateChecked] = useState(false);
+  const [allowedForNewUser, setAllowedForNewUser] = useState(false);
 
-  // Animation values
+  const pages: LocalOnboardingPage[] = LOCAL_ONBOARDING_PAGES;
+  const currentPage = pages[currentPageIndex];
+  const isLastPage = currentPageIndex === pages.length - 1;
+  const isFirstPage = currentPageIndex === 0;
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const imageOpacity = useRef(new Animated.Value(1)).current;
-  const imageScale = useRef(new Animated.Value(0.9)).current; // Image scale animation
+  const imageScale = useRef(new Animated.Value(0.9)).current;
   const titleOpacity = useRef(new Animated.Value(1)).current;
-  const titleTranslateY = useRef(new Animated.Value(20)).current; // Staggered text animation
+  const titleTranslateY = useRef(new Animated.Value(20)).current;
   const descriptionOpacity = useRef(new Animated.Value(1)).current;
-  const descriptionTranslateY = useRef(new Animated.Value(20)).current; // Staggered text animation
-  // Pagination dots - support up to 10 pages from API
+  const descriptionTranslateY = useRef(new Animated.Value(20)).current;
   const paginationDotScales = useRef(
-    Array.from({ length: 10 }, () => new Animated.Value(1))
+    Array.from({ length: pages.length }, () => new Animated.Value(1))
   ).current;
   const paginationDotOpacities = useRef(
-    Array.from({ length: 10 }, () => new Animated.Value(0.5))
+    Array.from({ length: pages.length }, () => new Animated.Value(0.5))
   ).current;
-  
-  // Progress animation for active dot (8 seconds)
   const progressAnim = useRef(new Animated.Value(0)).current;
   const progressAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-  
-  // Swipe animation
   const swipeAnim = useRef(new Animated.Value(0)).current;
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 10;
-      },
-      onPanResponderMove: (_, gestureState) => {
-        swipeAnim.setValue(gestureState.dx);
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        const swipeThreshold = SCREEN_WIDTH * 0.25;
-        if (Math.abs(gestureState.dx) > swipeThreshold) {
-          if (gestureState.dx < 0 && !isLastPage) {
-            // Swipe left - go to next
-            handleNext();
-          } else if (gestureState.dx > 0 && !isFirstPage) {
-            // Swipe right - go to previous
-            goToPrevious();
-          } else {
-            // Snap back
-            Animated.spring(swipeAnim, {
-              toValue: 0,
-              useNativeDriver: true,
-            }).start();
-          }
-        } else {
-          // Snap back
-          Animated.spring(swipeAnim, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
-    })
-  ).current;
-
-  // Auto-advance timer ref
-  const autoAdvanceTimer = useRef<NodeJS.Timeout | null>(null);
+  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentPageIndexRef = useRef(currentPageIndex);
-
-  // Pages from API only (no fallback)
-  const pages = onboardingPages.map((page) => ({
-    ...page,
-    image: page.imageUrl?.startsWith('http')
-      ? { uri: page.imageUrl }
-      : getOnboardingImage(page.pageNumber || 1),
-  }));
-  const safePages = pages;
-
-  const currentPage = safePages[currentPageIndex];
-  const isLastPage = currentPageIndex === safePages.length - 1;
-  const isFirstPage = currentPageIndex === 0;
+  const isLastPageRef = useRef(isLastPage);
+  const isFirstPageRef = useRef(isFirstPage);
 
   const navigateAfterOnboarding = async () => {
     await tokenManager.initialize();
     if (tokenManager.isTokenValid()) {
       navigation.replace('MainTabs');
-    } else {
-      navigateToLoginScreen(navigation);
+      return;
     }
+    // Go straight to Login (do not bounce through Splash — that delayed/blocked login)
+    navigation.replace('Login', { fromSplash: APP_LAUNCH_ID });
   };
 
-  // Fetch onboarding pages from API only; on failure/empty, fallback = move to login/home
-  const fetchPages = async () => {
-    try {
-      setFetchingPages(true);
-      const response = await getOnboardingPages();
-
-      // Backend returns { success, data: [...] }; interceptor returns that body as response
-      const raw = response as { data?: unknown; pages?: unknown };
-      const data = raw?.data ?? raw?.pages;
-      const items = Array.isArray(data) ? data : Array.isArray(response) ? response : [];
-
-      if (items.length > 0) {
-        const sortedPages = [...items].sort(
-          (a, b) =>
-            (Number((a as OnboardingPage).pageNumber) ?? (a as OnboardingPage).order ?? 0) -
-            (Number((b as OnboardingPage).pageNumber) ?? (b as OnboardingPage).order ?? 0)
-        ) as OnboardingPage[];
-        setOnboardingPages(sortedPages);
-        if (__DEV__) {
-          logger.info(`Onboarding: loaded ${sortedPages.length} pages from API`);
-        }
-      } else {
-        // Empty pages is valid: backend has no onboarding configured -> skip ahead
-        if (__DEV__) {
-          logger.debug('Onboarding: no pages configured, skipping ahead');
-        }
-        setOnboardingPages([]);
-      }
-    } catch (error: unknown) {
-      const err = error as { code?: string; message?: string };
-      const isNetworkError =
-        err?.code === 'NETWORK_ERROR' ||
-        err?.message === 'Network Error' ||
-        (typeof err?.message === 'string' && err.message.toLowerCase().includes('network'));
-      logger.warn('Error fetching onboarding pages, using fallback (move to next screen)', error);
-      if (__DEV__ && isNetworkError) {
-        const baseUrl = getEnvConfigSafe().apiBaseUrl;
-        logger.warn(
-          'Network Error: app cannot reach the backend. If running on a physical device or Android emulator, ' +
-            'localhost does not point to your machine. Start selorg-backend on port 3333 and set API_BASE_URL in .env to your machine IP, e.g. ' +
-            'API_BASE_URL=http://192.168.1.x:3333/api/v1/customer. Current baseUrl: ' + baseUrl
-        );
-      }
-      setOnboardingPages([]);
-    } finally {
-      setFetchingPages(false);
-    }
-  };
-
-  useRefreshOnFocus(() => {
-    void fetchPages();
-  }, []);
-
-  // Auth guard: if already logged in with valid token, stay in app
-  useEffect(() => {
-    let mounted = true;
-    const check = async () => {
-      try {
-        await tokenManager.initialize();
-        if (mounted && tokenManager.isTokenValid()) {
-          navigation.replace('MainTabs');
-        }
-      } catch {
-        // ignore
-      }
-    };
-    check();
-    return () => { mounted = false; };
-  }, [navigation]);
-
-  // Update ref when page index changes
-  useEffect(() => {
-    currentPageIndexRef.current = currentPageIndex;
-  }, [currentPageIndex]);
-
-  // Go to previous page function
   const goToPrevious = () => {
-    if (isFirstPage) return;
-    
-    // Clear auto-advance timer when manually navigating
+    if (isFirstPageRef.current) return;
     if (autoAdvanceTimer.current) {
       clearTimeout(autoAdvanceTimer.current);
       autoAdvanceTimer.current = null;
     }
-    // Stop progress animation
     if (progressAnimationRef.current) {
       progressAnimationRef.current.stop();
       progressAnimationRef.current = null;
     }
-    
-    // Animate out current content
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -246,25 +108,121 @@ function Onboarding({ onComplete }: OnboardingProps) {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      setCurrentPageIndex(currentPageIndex - 1);
+      setCurrentPageIndex((i) => Math.max(0, i - 1));
     });
   };
 
-  // Animate card change when page index changes
-  useEffect(() => {
-    // Clear auto-advance timer
+  const advanceToNextPage = () => {
+    if (isLastPageRef.current) return;
     if (autoAdvanceTimer.current) {
       clearTimeout(autoAdvanceTimer.current);
       autoAdvanceTimer.current = null;
     }
+    if (progressAnimationRef.current) {
+      progressAnimationRef.current.stop();
+      progressAnimationRef.current = null;
+    }
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: -30,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setCurrentPageIndex((i) => Math.min(pages.length - 1, i + 1));
+    });
+  };
 
-    // Stop progress animation if running
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 10,
+      onPanResponderMove: (_, gestureState) => {
+        swipeAnim.setValue(gestureState.dx);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const swipeThreshold = SCREEN_WIDTH * 0.25;
+        if (Math.abs(gestureState.dx) > swipeThreshold) {
+          if (gestureState.dx < 0 && !isLastPageRef.current) {
+            advanceToNextPage();
+          } else if (gestureState.dx > 0 && !isFirstPageRef.current) {
+            goToPrevious();
+          } else {
+            Animated.spring(swipeAnim, {
+              toValue: 0,
+              useNativeDriver: true,
+            }).start();
+          }
+        } else {
+          Animated.spring(swipeAnim, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  // New users only: returning users (onboarding done) or signed-in users never see these screens.
+  useEffect(() => {
+    let mounted = true;
+    const gate = async () => {
+      try {
+        await tokenManager.initialize();
+        if (!mounted) return;
+
+        if (tokenManager.isTokenValid()) {
+          navigation.replace('MainTabs');
+          return;
+        }
+
+        const alreadyDone = await getOnboardingCompleted();
+        if (!mounted) return;
+
+        if (alreadyDone) {
+          navigation.replace('Login', { fromSplash: APP_LAUNCH_ID });
+          return;
+        }
+
+        setAllowedForNewUser(true);
+      } catch (error) {
+        logger.warn('Onboarding gate check failed, defaulting to login', error);
+        if (mounted) {
+          navigation.replace('Login', { fromSplash: APP_LAUNCH_ID });
+        }
+      } finally {
+        if (mounted) setGateChecked(true);
+      }
+    };
+    void gate();
+    return () => {
+      mounted = false;
+    };
+  }, [navigation]);
+
+  useEffect(() => {
+    currentPageIndexRef.current = currentPageIndex;
+    isLastPageRef.current = isLastPage;
+    isFirstPageRef.current = isFirstPage;
+  }, [currentPageIndex, isLastPage, isFirstPage]);
+
+  useEffect(() => {
+    if (!allowedForNewUser) return;
+
+    if (autoAdvanceTimer.current) {
+      clearTimeout(autoAdvanceTimer.current);
+      autoAdvanceTimer.current = null;
+    }
     if (progressAnimationRef.current) {
       progressAnimationRef.current.stop();
       progressAnimationRef.current = null;
     }
 
-    // Reset animation values
     fadeAnim.setValue(0);
     slideAnim.setValue(30);
     imageOpacity.setValue(0);
@@ -274,18 +232,15 @@ function Onboarding({ onComplete }: OnboardingProps) {
     descriptionOpacity.setValue(0);
     descriptionTranslateY.setValue(20);
     swipeAnim.setValue(0);
-    progressAnim.setValue(0); // Reset progress animation
+    progressAnim.setValue(0);
 
-    // Reset pagination dots
-    paginationDotScales.forEach((scale, index) => {
-      scale.setValue(index === currentPageIndex ? 1.2 : 1);
+    paginationDotScales.forEach((s, index) => {
+      s.setValue(index === currentPageIndex ? 1.2 : 1);
     });
-    paginationDotOpacities.forEach((opacity, index) => {
-      opacity.setValue(index === currentPageIndex ? 1 : 0.5);
+    paginationDotOpacities.forEach((o, index) => {
+      o.setValue(index === currentPageIndex ? 1 : 0.5);
     });
 
-    // Animate in new content
-    // 1. Image scale + fade animation
     const imageAnimation = Animated.parallel([
       Animated.timing(imageOpacity, {
         toValue: 1,
@@ -301,7 +256,6 @@ function Onboarding({ onComplete }: OnboardingProps) {
       }),
     ]);
 
-    // 2. Staggered text animation - title first, then description
     const titleAnimation = Animated.parallel([
       Animated.timing(titleOpacity, {
         toValue: 1,
@@ -336,26 +290,26 @@ function Onboarding({ onComplete }: OnboardingProps) {
       }),
     ]);
 
-    // 3. Pagination dot animation
-    const paginationAnimations = safePages.map((_, index) => {
-      const isActive = index === currentPageIndex;
-      if (paginationDotScales[index] && paginationDotOpacities[index]) {
-        return Animated.parallel([
-          Animated.spring(paginationDotScales[index], {
-            toValue: isActive ? 1.2 : 1,
-            useNativeDriver: true,
-          }),
-          Animated.timing(paginationDotOpacities[index], {
-            toValue: isActive ? 1 : 0.5,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-        ]);
-      }
-      return null;
-    }).filter((anim): anim is Animated.CompositeAnimation => anim !== null);
+    const paginationAnimations = pages
+      .map((_, index) => {
+        const isActive = index === currentPageIndex;
+        if (paginationDotScales[index] && paginationDotOpacities[index]) {
+          return Animated.parallel([
+            Animated.spring(paginationDotScales[index], {
+              toValue: isActive ? 1.2 : 1,
+              useNativeDriver: true,
+            }),
+            Animated.timing(paginationDotOpacities[index], {
+              toValue: isActive ? 1 : 0.5,
+              duration: 300,
+              useNativeDriver: true,
+            }),
+          ]);
+        }
+        return null;
+      })
+      .filter((anim): anim is Animated.CompositeAnimation => anim !== null);
 
-    // Start all animations
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -373,21 +327,18 @@ function Onboarding({ onComplete }: OnboardingProps) {
       ...paginationAnimations,
     ]).start();
 
-    // Auto-advance: After 8 seconds, go to next page (except on last page)
     if (!isLastPage) {
-      // Start progress animation - animate from 0 to 1 over 8 seconds
       progressAnimationRef.current = Animated.timing(progressAnim, {
         toValue: 1,
-        duration: 8000, // 8 seconds
-        easing: Easing.linear, // Linear for smooth progress
-        useNativeDriver: false, // Width animation requires useNativeDriver: false
+        duration: 8000,
+        easing: Easing.linear,
+        useNativeDriver: false,
       });
       progressAnimationRef.current.start();
 
       autoAdvanceTimer.current = setTimeout(() => {
         const nextIndex = currentPageIndexRef.current + 1;
-        if (nextIndex < safePages.length) {
-          // Animate out current content and go to next
+        if (nextIndex < pages.length) {
           Animated.parallel([
             Animated.timing(fadeAnim, {
               toValue: 0,
@@ -406,7 +357,6 @@ function Onboarding({ onComplete }: OnboardingProps) {
       }, 8000);
     }
 
-    // Cleanup
     return () => {
       if (autoAdvanceTimer.current) {
         clearTimeout(autoAdvanceTimer.current);
@@ -418,16 +368,26 @@ function Onboarding({ onComplete }: OnboardingProps) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPageIndex, isLastPage]);
+  }, [currentPageIndex, isLastPage, allowedForNewUser]);
 
-  // Handle next/complete button
+  const finishOnboarding = async () => {
+    // Persist locally first so next launch skips onboarding even if API is slow/down
+    await saveOnboardingCompleted();
+    void completeOnboarding().catch(() => {
+      logger.info('User not authenticated, onboarding marked completed locally only');
+    });
+    if (onComplete) {
+      onComplete();
+    } else {
+      await navigateAfterOnboarding();
+    }
+  };
+
   const handleNext = async () => {
-    // Clear auto-advance timer when manually navigating
     if (autoAdvanceTimer.current) {
       clearTimeout(autoAdvanceTimer.current);
       autoAdvanceTimer.current = null;
     }
-    // Stop progress animation
     if (progressAnimationRef.current) {
       progressAnimationRef.current.stop();
       progressAnimationRef.current = null;
@@ -436,53 +396,9 @@ function Onboarding({ onComplete }: OnboardingProps) {
     setLoading(true);
     try {
       if (isLastPage) {
-        // Last page - complete onboarding and continue based on auth state
-        try {
-          // Mark onboarding as completed in backend (if user is authenticated)
-          await completeOnboarding();
-        } catch (error) {
-          // If user is not authenticated, just mark locally
-          logger.info('User not authenticated, marking onboarding completed locally');
-        }
-
-        // Mark onboarding as completed locally
-        await saveOnboardingCompleted();
-
-        // TODO: Track onboarding completion
-        // await analytics.track('onboarding_completed', {
-        //   completed_at: new Date().toISOString(),
-        //   total_screens: safePages.length,
-        // });
-
-        if (onComplete) {
-          onComplete();
-        } else {
-          await navigateAfterOnboarding();
-        }
+        await finishOnboarding();
       } else {
-        // Not last page - Go to next page with smooth animation
-        // TODO: Track onboarding progression
-        // await analytics.track('onboarding_next_clicked', {
-        //   from_page: currentPageIndex + 1,
-        //   to_page: currentPageIndex + 2,
-        // });
-
-        // Animate out current content
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideAnim, {
-            toValue: -30,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-        ]).start(() => {
-          // Change page after animation completes
-          setCurrentPageIndex(currentPageIndex + 1);
-        });
+        advanceToNextPage();
       }
     } catch (error) {
       logger.error('Error handling next', error);
@@ -491,49 +407,27 @@ function Onboarding({ onComplete }: OnboardingProps) {
     }
   };
 
-  // Show loading indicator while fetching pages
-  if (fetchingPages) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#034703" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // API returned empty or failed - fallback: mark complete, then continue based on auth state
-  if (safePages.length === 0) {
-    if (!fallbackNavigateRef.current) {
-      fallbackNavigateRef.current = true;
-      (async () => {
-        try {
-          await saveOnboardingCompleted();
-        } catch (e) {
-          logger.warn('Fallback: saveOnboardingCompleted failed', e);
-        }
-        if (onComplete) {
-          onComplete();
-        } else {
-          await navigateAfterOnboarding();
-        }
-      })();
+  const handleSkip = async () => {
+    if (autoAdvanceTimer.current) {
+      clearTimeout(autoAdvanceTimer.current);
+      autoAdvanceTimer.current = null;
     }
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#034703" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+    if (progressAnimationRef.current) {
+      progressAnimationRef.current.stop();
+      progressAnimationRef.current = null;
+    }
+    setLoading(true);
+    try {
+      await finishOnboarding();
+    } catch (error) {
+      logger.error('Error skipping onboarding', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Responsive dimensions - Image size optimized for screen
-  // Calculate responsive values based on screen size
   const responsiveStyles = {
-    imageHeight: verticalScale(425 * 0.95), // Reduced by 5% for better balance (425 * 0.95 = 403.75)
+    imageHeight: verticalScale(425 * 0.95),
     headingFontSize: scaleFont(24),
     paragraphFontSize: scaleFont(14),
     buttonPaddingVertical: verticalScale(13),
@@ -547,43 +441,29 @@ function Onboarding({ onComplete }: OnboardingProps) {
     paginationMarginTop: verticalScale(4),
   };
 
-  const handleSkip = async () => {
-    if (autoAdvanceTimer.current) {
-      clearTimeout(autoAdvanceTimer.current);
-      autoAdvanceTimer.current = null;
-    }
-    if (progressAnimationRef.current) {
-      progressAnimationRef.current.stop();
-      progressAnimationRef.current = null;
-    }
-    setCurrentPageIndex(safePages.length - 1);
-  };
+  const ctaLabel = isLastPage
+    ? currentPage.ctaText || 'Begin your clean food journey'
+    : 'Next';
+
+  if (!gateChecked || !allowedForNewUser) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" />
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
 
-      {/* Skip Button - Top Right */}
-      {!isLastPage && (
-        <TouchableOpacity
-          style={styles.skipButton}
-          onPress={handleSkip}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.skipButtonText}>Skip</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Header Section with Image and Text */}
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Animated.View
         style={[
           styles.headerContainer,
           {
             opacity: fadeAnim,
-            transform: [
-              { translateY: slideAnim },
-              { translateX: swipeAnim },
-            ],
+            transform: [{ translateY: slideAnim }, { translateX: swipeAnim }],
             paddingTop: responsiveStyles.headerPaddingTop,
             paddingBottom: responsiveStyles.headerPaddingBottom,
             gap: responsiveStyles.headerContainerGap,
@@ -591,31 +471,27 @@ function Onboarding({ onComplete }: OnboardingProps) {
         ]}
         {...panResponder.panHandlers}
       >
-        {/* Image Container - Scale + Fade Animation */}
         <Animated.View
           style={[
-            styles.imageContainer,
+            styles.imageOuter,
             {
               opacity: imageOpacity,
               transform: [{ scale: imageScale }],
-              height: responsiveStyles.imageHeight,
             },
           ]}
         >
-          <Image
-            source={typeof currentPage.image === 'object' && 'uri' in currentPage.image 
-              ? currentPage.image 
-              : currentPage.image || getOnboardingImage(currentPageIndex + 1)}
-            style={styles.image}
-            resizeMode="cover"
-            // Prevent background bleeding in release builds
-            defaultSource={undefined}
-          />
+          <View style={[styles.imageContainer, { height: responsiveStyles.imageHeight }]}>
+            <Image
+              key={currentPage.pageNumber}
+              source={currentPage.image}
+              style={styles.image}
+              resizeMode="cover"
+              accessibilityLabel={currentPage.title}
+            />
+          </View>
         </Animated.View>
 
-        {/* Text Container - Staggered Animation */}
         <View style={[styles.textContainer, { gap: responsiveStyles.textContainerGap }]}>
-          {/* Title - Animates first */}
           <Animated.View
             style={[
               styles.headingContainer,
@@ -625,10 +501,11 @@ function Onboarding({ onComplete }: OnboardingProps) {
               },
             ]}
           >
-            <Text style={[styles.heading, { fontSize: responsiveStyles.headingFontSize }]}>{currentPage.title}</Text>
+            <Text style={[styles.heading, { fontSize: responsiveStyles.headingFontSize }]}>
+              {currentPage.title}
+            </Text>
           </Animated.View>
-          
-          {/* Description - Animates after title */}
+
           <Animated.View
             style={[
               styles.paragraphContainer,
@@ -638,12 +515,13 @@ function Onboarding({ onComplete }: OnboardingProps) {
               },
             ]}
           >
-            <Text style={[styles.paragraph, { fontSize: responsiveStyles.paragraphFontSize }]}>{currentPage.description}</Text>
+            <Text style={[styles.paragraph, { fontSize: responsiveStyles.paragraphFontSize }]}>
+              {currentPage.description}
+            </Text>
           </Animated.View>
         </View>
       </Animated.View>
 
-      {/* Pagination Dots - Animated with Progress Bar */}
       <Animated.View
         style={[
           styles.paginationContainer,
@@ -654,37 +532,35 @@ function Onboarding({ onComplete }: OnboardingProps) {
           },
         ]}
       >
-        {safePages.map((_, index) => {
+        {pages.map((_, index) => {
           const isActive = index === currentPageIndex;
-          
-          // Interpolate width for active dot: 7px to 28px over 8 seconds (responsive)
           const dotInactiveWidth = scale(7);
           const dotActiveWidth = scale(28);
           const animatedWidth = isActive
             ? progressAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [dotInactiveWidth, dotActiveWidth], // From inactive width to active width
+                outputRange: [dotInactiveWidth, dotActiveWidth],
               })
-            : dotInactiveWidth; // Inactive dots stay at scaled 7px
+            : dotInactiveWidth;
 
           return (
             <View key={index} style={styles.paginationDotWrapper}>
               <Animated.View
-                style={[
-                  {
-                    width: isActive ? animatedWidth : dotInactiveWidth, // Animate width only for active dot (JS-driven)
-                    height: scale(7),
-                    overflow: 'hidden',
-                    borderRadius: scale(3.5), // Rounded edges for the loading bar
-                  },
-                ]}
+                style={{
+                  width: isActive ? animatedWidth : dotInactiveWidth,
+                  height: scale(7),
+                  overflow: 'hidden',
+                  borderRadius: scale(3.5),
+                }}
               >
                 <Animated.View
                   style={[
                     styles.paginationDot,
-                    index === currentPageIndex && styles.paginationDotActive,
+                    isActive && styles.paginationDotActive,
                     {
-                      transform: [{ scale: paginationDotScales[index] || new Animated.Value(1) }],
+                      transform: [
+                        { scale: paginationDotScales[index] || new Animated.Value(1) },
+                      ],
                       opacity: paginationDotOpacities[index] || new Animated.Value(0.5),
                     },
                   ]}
@@ -695,26 +571,23 @@ function Onboarding({ onComplete }: OnboardingProps) {
         })}
       </Animated.View>
 
-      {/* Next/Complete Button */}
       <View style={[styles.buttonContainer, { marginBottom: responsiveStyles.buttonMarginBottom }]}>
         <TouchableOpacity
           style={[
-            styles.nextButton, 
+            styles.nextButton,
             loading && styles.nextButtonDisabled,
             {
               paddingVertical: responsiveStyles.buttonPaddingVertical,
               paddingHorizontal: responsiveStyles.buttonPaddingHorizontal,
-            }
+            },
           ]}
           onPress={handleNext}
           disabled={loading}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={ctaLabel}
         >
-          <Text style={styles.nextButtonText}>
-            {isLastPage
-              ? (currentPage.ctaText || 'Get Started')
-              : 'Next'}
-          </Text>
+          <Text style={styles.nextButtonText}>{ctaLabel}</Text>
           {!isLastPage && (
             <View style={styles.nextButtonIcon}>
               <Text style={styles.nextButtonIconText}>›</Text>
@@ -722,67 +595,26 @@ function Onboarding({ onComplete }: OnboardingProps) {
           )}
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+      </SafeAreaView>
+
+      <SkipButton
+        onPress={handleSkip}
+        disabled={loading}
+        accessibilityLabel="Skip onboarding"
+      />
+    </View>
   );
 }
 
-// Reusable Sub-components (for easy componentization)
-const PaginationDot: React.FC<{ active: boolean }> = ({ active }) => (
-  <View
-    style={[styles.paginationDot, active && styles.paginationDotActive]}
-  />
-);
-
-const OnboardingButton: React.FC<{
-  text: string;
-  onPress: () => void;
-  loading?: boolean;
-}> = ({ text, onPress, loading = false }) => (
-  <TouchableOpacity
-    style={[
-      styles.nextButton,
-      loading && styles.nextButtonDisabled,
-    ]}
-    onPress={onPress}
-    disabled={loading}
-    activeOpacity={0.8}
-  >
-    <Text style={styles.nextButtonText}>
-      {text}
-    </Text>
-  </TouchableOpacity>
-);
-
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: Colors.background,
     alignItems: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorText: {
-    fontFamily: 'Inter',
-    fontSize: scale(16),
-    color: '#6B6B6B',
-    textAlign: 'center',
-  },
-  skipButton: {
-    position: 'absolute',
-    top: verticalScale(16),
-    right: getSpacing(16),
-    zIndex: 10,
-    paddingVertical: verticalScale(6),
-    paddingHorizontal: scale(16),
-  },
-  skipButtonText: {
-    fontFamily: 'Inter',
-    fontWeight: '500',
-    fontSize: scale(14),
-    color: '#6B6B6B',
   },
   headerContainer: {
     flex: 1,
@@ -790,29 +622,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  imageContainer: {
+  imageOuter: {
     width: '100%',
     paddingHorizontal: getSpacing(16),
-    borderRadius: scale(8),
-    overflow: 'hidden',
     alignSelf: 'stretch',
-    // Set solid background color to fix shadow calculation warning
-    backgroundColor: '#FFFFFF',
-    // Platform-specific shadow handling
+  },
+  imageContainer: {
+    width: '100%',
+    borderRadius: scale(20),
+    overflow: 'hidden',
+    backgroundColor: Colors.white,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: {
-          width: 0,
-          height: 4,
-        },
+        shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 6,
       },
       android: {
-        // Reduced elevation to prevent grey background in release builds
         elevation: 2,
-        // Add a subtle border to replace elevation shadow
         borderWidth: 0.5,
         borderColor: 'rgba(0, 0, 0, 0.05)',
       },
@@ -821,16 +649,7 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
-    borderRadius: scale(8),
-    // Ensure image fills container without background bleeding
     backgroundColor: 'transparent',
-    // Prevent any default background
-    ...Platform.select({
-      android: {
-        // Android-specific: ensure proper rendering
-        overflow: 'hidden',
-      },
-    }),
   },
   textContainer: {
     width: '100%',
@@ -843,7 +662,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '700',
     lineHeight: verticalScale(32),
-    color: '#1A1A1A',
+    color: Colors.text,
     textAlign: 'center',
   },
   paragraphContainer: {
@@ -868,13 +687,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   paginationDot: {
-    width: scale(28), // Full width - container will clip it
+    width: scale(28),
     height: scale(7),
     borderRadius: scale(3.5),
     backgroundColor: '#E8E8E8',
   },
   paginationDotActive: {
-    backgroundColor: '#034703',
+    backgroundColor: Colors.primary,
   },
   buttonContainer: {
     width: '100%',
@@ -885,8 +704,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    backgroundColor: '#034703',
-    borderRadius: scale(8),
+    backgroundColor: Colors.primary,
+    borderRadius: scale(12),
     gap: scale(6),
     minHeight: verticalScale(48),
   },
@@ -898,7 +717,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: scale(14),
     lineHeight: verticalScale(22.4),
-    color: '#FFFFFF',
+    color: Colors.white,
     textAlign: 'center',
   },
   nextButtonIcon: {
@@ -906,10 +725,10 @@ const styles = StyleSheet.create({
     height: scale(14),
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: verticalScale(1), // Slight adjustment for better visual centering
+    paddingTop: verticalScale(1),
   },
   nextButtonIconText: {
-    color: '#FFFFFF',
+    color: Colors.white,
     fontSize: scale(16),
     fontWeight: 'bold',
     lineHeight: scale(14),
@@ -918,4 +737,3 @@ const styles = StyleSheet.create({
 });
 
 export default Onboarding;
-

@@ -25,6 +25,11 @@ import { logger } from '@/utils/logger';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { getEnvConfigSafe } from '../config/env';
 import { tokenManager } from '../services/api/tokenManager';
+import {
+  formatPaymentLine,
+  resolveEstimatedDeliveryMessage,
+  resolveOrderPaymentLines,
+} from '../utils/paymentMethodDisplay';
 
 
 const formatDate = (dateStr: string): string => {
@@ -124,7 +129,7 @@ const OrderSuccessfulDetails: React.FC = () => {
   };
 
   const handleCallSupport = () => {
-    Linking.openURL(`tel:${appConfig.support?.contactPhone ?? '+919999999999'}`);
+    Linking.openURL(`tel:${appConfig.support?.contactPhone ?? '+919444183378'}`);
   };
 
   if (loading) {
@@ -158,6 +163,8 @@ const OrderSuccessfulDetails: React.FC = () => {
   const deliveryFee = appConfig.checkout?.deliveryFee ?? 0;
   const totalBill = Math.max(0, itemTotal + handlingCharge + deliveryFee - (order.discount ?? 0));
   const discount = order.discount ?? 0;
+  const paymentLines = resolveOrderPaymentLines(order);
+  const etaMessage = resolveEstimatedDeliveryMessage(order);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -187,6 +194,9 @@ const OrderSuccessfulDetails: React.FC = () => {
               </View>
             )}
           </View>
+          {etaMessage ? (
+            <Text style={styles.etaMessage}>{etaMessage}</Text>
+          ) : null}
         </View>
 
         {order.timeline && order.timeline.length > 0 && (
@@ -277,6 +287,16 @@ const OrderSuccessfulDetails: React.FC = () => {
           <View style={styles.orderDetailsRow}>
             <Text style={styles.orderDetailsLabel}>Order Placed</Text>
             <Text style={styles.orderDetailsValue}>{formatDate(order.createdAt)}</Text>
+          </View>
+          <View style={styles.orderDetailsRow}>
+            <Text style={styles.orderDetailsLabel}>Payment Method</Text>
+            <View style={styles.paymentMethodValue}>
+              {paymentLines.map((line) => (
+                <Text key={`${line.label}-${line.amount ?? 'x'}`} style={styles.orderDetailsValue}>
+                  {formatPaymentLine(line)}
+                </Text>
+              ))}
+            </View>
           </View>
         </View>
 
@@ -380,6 +400,17 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: '#4E4E4E',
   },
+  paymentMethodValue: {
+    alignItems: 'flex-start',
+    gap: 2,
+  },
+  orderDetailsEta: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+    color: '#1E63D0',
+    marginTop: 4,
+  },
   helpRow: {
     flexDirection: 'row',
     marginHorizontal: 16,
@@ -476,6 +507,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 22.4,
     color: '#1A1A1A',
+  },
+  etaMessage: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+    color: '#1E63D0',
   },
   arrivedInBadge: {
     flexDirection: 'row',

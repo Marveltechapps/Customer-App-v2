@@ -1,6 +1,7 @@
 import { NavigationContainerRef, CommonActions } from '@react-navigation/native';
 import type { RootStackParamList } from '../types/navigation';
-import { APP_LAUNCH_ID } from '../constants/appLaunch';
+import { APP_LAUNCH_ID, hasSplashCompletedThisSession, markSplashCompleted } from '../constants/appLaunch';
+import { resolveNotificationNavigation } from './resolveNotificationNavigation';
 
 let _navRef: NavigationContainerRef<RootStackParamList> | null = null;
 let _onLogout: (() => void) | null = null;
@@ -18,39 +19,32 @@ export function setOnLogoutCallback(cb: (() => void) | null) {
   _onLogout = cb;
 }
 
+/**
+ * Login is allowed after splash has run this session, or when Splash stamped the route.
+ * Never bounce Login → Splash → Login (that caused the continuous splash loop).
+ */
 export function isLoginAuthorizedFromSplash(fromSplash?: string): boolean {
-  return fromSplash === APP_LAUNCH_ID;
+  if (hasSplashCompletedThisSession()) return true;
+  return fromSplash === APP_LAUNCH_ID || typeof fromSplash === 'string';
 }
 
-/** Always show branded splash, then login (never push Login directly). */
+/** Go to Login without replaying Splash (splash already ran on cold start). */
 export function navigateToLoginScreen(
-  navigation: { replace: (name: 'Splash', params?: RootStackParamList['Splash']) => void }
+  navigation: { replace: (name: keyof RootStackParamList, params?: any) => void }
 ) {
-  navigation.replace('Splash', { next: 'Login' });
+  markSplashCompleted();
+  navigation.replace('Login', { fromSplash: APP_LAUNCH_ID });
 }
 
+/** Session expired / logout — clear user and reset to Login (not Splash). */
 export function resetToLogin() {
   _onLogout?.();
+  markSplashCompleted();
   if (!_navRef?.isReady()) return;
   _navRef.dispatch(
     CommonActions.reset({
       index: 0,
-      routes: [{ name: 'Splash', params: { next: 'Login' } }],
-    })
-  );
-}
-
-/** On cold start / reload, force Splash if navigation restored onto Login without a valid launch token. */
-export function ensureSplashOnLaunch() {
-  if (!_navRef?.isReady()) return;
-  const route = _navRef.getCurrentRoute();
-  if (route?.name !== 'Login') return;
-  const params = route.params as RootStackParamList['Login'];
-  if (isLoginAuthorizedFromSplash(params?.fromSplash)) return;
-  _navRef.dispatch(
-    CommonActions.reset({
-      index: 0,
-      routes: [{ name: 'Splash', params: { next: 'Login' } }],
+      routes: [{ name: 'Login', params: { fromSplash: APP_LAUNCH_ID } }],
     })
   );
 }
@@ -58,36 +52,16 @@ export function ensureSplashOnLaunch() {
 export function navigateFromNotification(data: Record<string, any> | undefined) {
   if (!data || !_navRef?.isReady()) return;
 
-  const type = data.type as string | undefined;
-  if (!type) return;
+  const target = resolveNotificationNavigation({
+    type: typeof data.type === 'string' ? data.type : undefined,
+    orderId: typeof data.orderId === 'string' ? data.orderId : undefined,
+    ...data,
+  });
+  if (!target) return;
 
-  const ORDER_TYPES = [
-    'ORDER_PLACED',
-    'ORDER_CONFIRMED',
-    'ORDER_PACKED',
-    'ORDER_ON_WAY',
-    'ORDER_ARRIVED',
-    'ORDER_DELIVERED',
-    'ORDER_CANCELLED',
-    'DELIVERY_DELAYED',
-    'MISSING_ITEMS',
-  ];
-
-  const REFUND_TYPES = ['REFUND_APPROVED', 'REFUND_COMPLETED', 'REFUND_REJECTED'];
-
-  if (ORDER_TYPES.includes(type)) {
-    if (type === 'ORDER_CANCELLED') {
-      _navRef.navigate('Orders' as any);
-    } else if (type === 'ORDER_DELIVERED') {
-      _navRef.navigate('Orders' as any);
-    } else {
-      _navRef.navigate('OrderStatus' as any);
-    }
-  } else if (REFUND_TYPES.includes(type)) {
-    _navRef.navigate('Refunds' as any);
-  } else if (type === 'WALLET_CREDIT') {
-    _navRef.navigate('Wallet' as any);
-  } else if (type === 'SUPPORT_REPLY') {
-    _navRef.navigate('CustomerSupport' as any);
+  if (target.screen === 'Payment') {
+    _navRef.navigate('Payment', target.params);
+    return;
   }
+  _navRef.navigate(target.screen as any);
 }

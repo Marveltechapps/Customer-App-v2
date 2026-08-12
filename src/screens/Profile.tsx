@@ -8,25 +8,75 @@ import {
   ScrollView,
   StatusBar,
   TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import Header from '../components/layout/Header';
 import ProfileUpdateSuccess from './ProfileUpdateSuccess';
 import { logger } from '@/utils/logger';
-import { getProfile, updateProfile } from '../services/profile/profileService';
+import {
+  getProfile,
+  updateProfile,
+  uploadAvatar,
+  sendLinkPhoneOtp,
+  verifyLinkPhoneOtp,
+  resendLinkPhoneOtp,
+} from '../services/profile/profileService';
+import { getApiErrorMessage } from '../services/api/types';
 import { useUser } from '../contexts/UserContext';
 import { saveUserData } from '../utils/storage';
+import { useResponsive } from '@/utils/responsive';
+import { validatePhone, stripDigits } from '@/lib/phoneValidation';
+
+function normalizeAuthPhone(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const digits = stripDigits(value).slice(-10);
+  return digits.length === 10 ? digits : '';
+}
+
+async function uriToBase64(uri: string): Promise<string> {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result ?? '');
+      const base64 = result.includes(',') ? result.split(',')[1]! : result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('Could not read image'));
+    reader.readAsDataURL(blob);
+  });
+}
 
 const Profile: React.FC = () => {
+  const { isTablet, scaleFont: rFont } = useResponsive();
   const { user, setUser } = useUser();
   const userRef = useRef(user);
   const [name, setName] = useState<string>('');
   const [mobileNumber, setMobileNumber] = useState<string>('');
   const [emailAddress, setEmailAddress] = useState<string>('');
+  const [avatarUrl, setAvatarUrl] = useState<string>('');
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const [isFetchingProfile, setIsFetchingProfile] = useState(false);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [phoneStep, setPhoneStep] = useState<'idle' | 'otp'>('idle');
+  const [phoneSessionId, setPhoneSessionId] = useState('');
+  const [otpDigits, setOtpDigits] = useState(['', '', '', '']);
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const otpInputRefs = useRef<(TextInput | null)[]>([]);
   const lastFetchAtRef = useRef(0);
+
+  const phoneLocked = phoneVerified && normalizeAuthPhone(mobileNumber).length === 10;
+  const hasLinkedPhone = normalizeAuthPhone(mobileNumber).length === 10;
 
   useEffect(() => {
     userRef.current = user;
@@ -66,20 +116,19 @@ const Profile: React.FC = () => {
         fallbackSavedCheckoutContact.fullName
       )
     );
-    setMobileNumber(
+    // Auth phone only — do not fall back to checkout contact (that is not a linked/verified number).
+    const authPhone = normalizeAuthPhone(
       firstNonEmpty(
         raw.phoneNumber,
         raw.mobileNumber,
-        raw.phone,
-        raw.mobile,
-        savedCheckoutContact.phone,
         fallback?.phoneNumber,
-        fallback?.mobileNumber,
-        fallback?.phone,
-        fallback?.mobile,
-        fallbackSavedCheckoutContact.phone
+        fallback?.mobileNumber
       )
     );
+    setMobileNumber(authPhone);
+    const verified =
+      Boolean(raw.phoneVerified ?? fallback?.phoneVerified) && authPhone.length === 10;
+    setPhoneVerified(verified);
     const resolvedEmail = firstNonEmpty(
       normalizeEmail(raw.email),
       normalizeEmail(raw.emailAddress),
@@ -89,6 +138,13 @@ const Profile: React.FC = () => {
       normalizeEmail(fallbackSavedCheckoutContact.email)
     );
     setEmailAddress(resolvedEmail);
+    const nextAvatar = firstNonEmpty(
+      raw.avatarUrl,
+      raw.avatar,
+      fallback?.avatarUrl,
+      fallback?.avatar
+    );
+    if (nextAvatar) setAvatarUrl(nextAvatar);
   };
 
   useEffect(() => {
@@ -96,6 +152,12 @@ const Profile: React.FC = () => {
       applyProfileData(user as Record<string, any>, null);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const t = setTimeout(() => setOtpCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [otpCooldown]);
 
   const fetchProfileData = useCallback(async (options?: { force?: boolean }) => {
     const now = Date.now();
@@ -160,27 +222,27 @@ const Profile: React.FC = () => {
     try {
       const trimmedName = name.trim();
       const trimmedEmail = emailAddress.trim();
-      const normalizedPhone = mobileNumber.replace(/\s/g, '');
+      const linkedPhone = phoneLocked ? normalizeAuthPhone(mobileNumber) : normalizeAuthPhone(
+        (userRef.current as Record<string, any> | null)?.phoneNumber ||
+          (userRef.current as Record<string, any> | null)?.mobileNumber ||
+          ''
+      );
       logger.info('[profile] update submit', {
-        payload: { name: trimmedName, email: trimmedEmail, phoneNumber: normalizedPhone },
+        payload: { name: trimmedName, email: trimmedEmail, phoneLocked },
       });
       const optimisticUser = {
         ...(userRef.current ?? {}),
         name: trimmedName || (userRef.current as Record<string, any> | null)?.name,
         email: trimmedEmail || (userRef.current as Record<string, any> | null)?.email,
-        phoneNumber:
-          normalizedPhone ||
-          (userRef.current as Record<string, any> | null)?.phoneNumber ||
-          (userRef.current as Record<string, any> | null)?.mobileNumber,
-        mobileNumber:
-          normalizedPhone ||
-          (userRef.current as Record<string, any> | null)?.mobileNumber ||
-          (userRef.current as Record<string, any> | null)?.phoneNumber,
+        phoneNumber: linkedPhone || undefined,
+        mobileNumber: linkedPhone || undefined,
+        phoneVerified: phoneLocked || Boolean((userRef.current as any)?.phoneVerified),
         savedCheckoutContact: {
           ...(((userRef.current as Record<string, any> | null)?.savedCheckoutContact ?? {}) as Record<string, any>),
           fullName: trimmedName || undefined,
           email: trimmedEmail || undefined,
-          phone: normalizedPhone || undefined,
+          // Keep checkout contact phone in sync with linked auth phone only when locked.
+          ...(linkedPhone ? { phone: linkedPhone } : {}),
         },
       };
 
@@ -199,10 +261,11 @@ const Profile: React.FC = () => {
         name: trimmedName,
         email: trimmedEmail,
         // Persist editable contact details for checkout/profile fallbacks.
+        // Do not send auth phoneNumber — linking requires OTP endpoints.
         savedCheckoutContact: {
           fullName: trimmedName || undefined,
           email: trimmedEmail || undefined,
-          phone: normalizedPhone || undefined,
+          ...(linkedPhone ? { phone: linkedPhone } : {}),
         },
       };
       const res = await updateProfile(payload);
@@ -213,22 +276,21 @@ const Profile: React.FC = () => {
           email: responseData.email ?? responseData.emailAddress,
           phoneNumber: responseData.phoneNumber ?? responseData.mobileNumber ?? responseData.phone,
         });
-        applyProfileData(responseData);
+        applyProfileData(responseData, optimisticUser);
         const mergedUser = {
           ...(optimisticUser ?? {}),
           ...responseData,
           name: trimmedName || responseData.name || responseData.fullName,
           email: trimmedEmail || responseData.email || responseData.emailAddress,
           phoneNumber:
-            normalizedPhone ||
-            responseData.phoneNumber ||
-            responseData.mobileNumber ||
-            responseData.phone,
+            normalizeAuthPhone(responseData.phoneNumber) ||
+            linkedPhone ||
+            undefined,
           mobileNumber:
-            normalizedPhone ||
-            responseData.mobileNumber ||
-            responseData.phoneNumber ||
-            responseData.phone,
+            normalizeAuthPhone(responseData.mobileNumber || responseData.phoneNumber) ||
+            linkedPhone ||
+            undefined,
+          phoneVerified: Boolean(responseData.phoneVerified ?? optimisticUser.phoneVerified),
         };
         setUser(mergedUser);
         logger.info('[profile] context updated final', {
@@ -249,6 +311,132 @@ const Profile: React.FC = () => {
     }
   };
 
+  const handleSendPhoneOtp = async () => {
+    const digits = normalizeAuthPhone(mobileNumber);
+    const validation = validatePhone(digits, 'IN', 'mobile');
+    if (!validation.valid) {
+      setPhoneError(validation.message || 'Enter a valid 10-digit mobile number');
+      return;
+    }
+    setPhoneBusy(true);
+    setPhoneError(null);
+    try {
+      const res = await sendLinkPhoneOtp(digits, 'sms');
+      const sessionId = (res as any)?.sessionId ?? (res as any)?.data?.sessionId;
+      if (!sessionId) {
+        throw new Error(getApiErrorMessage(res, 'Failed to send OTP'));
+      }
+      setPhoneSessionId(sessionId);
+      setOtpCooldown(
+        (res as any)?.resendCooldownSeconds ?? (res as any)?.data?.resendCooldownSeconds ?? 30
+      );
+      setOtpDigits(['', '', '', '']);
+      setPhoneStep('otp');
+      setTimeout(() => otpInputRefs.current[0]?.focus(), 80);
+    } catch (err) {
+      setPhoneError(getApiErrorMessage(err, 'Could not send OTP. Please try again.'));
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
+  const handleVerifyPhoneOtp = async () => {
+    const code = otpDigits.join('');
+    if (code.length !== 4 || !phoneSessionId) {
+      setPhoneError('Enter the 4-digit OTP');
+      return;
+    }
+    setPhoneBusy(true);
+    setPhoneError(null);
+    try {
+      const res = await verifyLinkPhoneOtp(phoneSessionId, code);
+      const responseData = ((res as any)?.data ?? res) as Record<string, any>;
+      if (!res?.success && !responseData?.phoneNumber) {
+        throw new Error(getApiErrorMessage(res, 'Could not verify phone number'));
+      }
+      const linked = normalizeAuthPhone(responseData.phoneNumber || mobileNumber);
+      const mergedUser = {
+        ...(userRef.current ?? {}),
+        ...responseData,
+        phoneNumber: linked,
+        mobileNumber: linked,
+        phoneVerified: true,
+      };
+      applyProfileData(mergedUser);
+      setUser(mergedUser);
+      await saveUserData(JSON.stringify(mergedUser));
+      setPhoneStep('idle');
+      setOtpDigits(['', '', '', '']);
+      setShowSuccessModal(true);
+    } catch (err) {
+      setPhoneError(getApiErrorMessage(err, 'Invalid OTP. Please try again.'));
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
+  const handleResendPhoneOtp = async () => {
+    if (!phoneSessionId || otpCooldown > 0) return;
+    setPhoneBusy(true);
+    setPhoneError(null);
+    try {
+      const res = await resendLinkPhoneOtp(phoneSessionId);
+      setOtpCooldown(
+        (res as any)?.resendCooldownSeconds ?? (res as any)?.data?.resendCooldownSeconds ?? 30
+      );
+    } catch (err) {
+      setPhoneError(getApiErrorMessage(err, 'Could not resend OTP. Please try again.'));
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
+  const handlePickAvatar = async () => {
+    if (avatarUploading || isUpdatingProfile) return;
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: 'image/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (picked.canceled || !picked.assets?.[0]?.uri) return;
+      const asset = picked.assets[0];
+      if (asset.size != null && asset.size > 5 * 1024 * 1024) {
+        Alert.alert('Image too large', 'Please choose an image under 5 MB.');
+        return;
+      }
+      setAvatarUploading(true);
+      const base64 = await uriToBase64(asset.uri);
+      const res = await uploadAvatar(base64);
+      if (res?.success && res.data) {
+        const responseData = res.data as Record<string, any>;
+        const url = String(responseData.avatarUrl ?? responseData.avatar ?? '').trim();
+        if (url) setAvatarUrl(url);
+        applyProfileData(responseData, user as Record<string, any>);
+        const mergedUser = {
+          ...(user ?? {}),
+          ...responseData,
+          avatarUrl: url || (user as any)?.avatarUrl,
+          avatar: url || (user as any)?.avatar,
+        };
+        setUser(mergedUser);
+        await saveUserData(JSON.stringify(mergedUser));
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (err) {
+      logger.error('Avatar upload failed', err);
+      Alert.alert(
+        'Upload failed',
+        err instanceof Error ? err.message : 'Could not upload photo. Please try again.'
+      );
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const avatarInitial = (name || 'U').trim().charAt(0).toUpperCase();
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -258,14 +446,37 @@ const Profile: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.formContainer}>
+        <View style={[styles.formContainer, isTablet && styles.formContainerTablet]}>
+          <TouchableOpacity
+            style={styles.avatarWrap}
+            onPress={() => void handlePickAvatar()}
+            activeOpacity={0.8}
+            disabled={avatarUploading}
+          >
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarFallback}>
+                <Text style={styles.avatarInitial}>{avatarInitial}</Text>
+              </View>
+            )}
+            <View style={styles.avatarBadge}>
+              {avatarUploading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.avatarBadgeText}>Edit</Text>
+              )}
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.avatarHint}>Tap to upload a profile photo</Text>
+
           {/* Name Input */}
           <View style={styles.inputContainer}>
             <View style={styles.labelContainer}>
-              <Text style={styles.label}>Name*</Text>
+              <Text style={[styles.label, { fontSize: rFont(14, 13, 17) }]}>Name*</Text>
             </View>
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput, { fontSize: rFont(14, 13, 17) }]}
               placeholder="Enter Details"
               placeholderTextColor="#6B6B6B"
               value={name}
@@ -278,27 +489,157 @@ const Profile: React.FC = () => {
           {/* Mobile Number Input */}
           <View style={styles.inputContainer}>
             <View style={styles.labelContainer}>
-              <Text style={styles.label}>Mobile number*</Text>
+              <Text style={[styles.label, { fontSize: rFont(14, 13, 17) }]}>
+                Mobile number{phoneLocked || hasLinkedPhone ? '' : '*'}
+              </Text>
             </View>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Enter Details"
-              placeholderTextColor="#6B6B6B"
-              value={mobileNumber}
-              onChangeText={setMobileNumber}
-              keyboardType="phone-pad"
-              editable={!isUpdatingProfile}
-              textAlignVertical="center"
-            />
+            <View style={[styles.phoneRow, phoneLocked && styles.phoneRowLocked]}>
+              <Text style={[styles.phonePrefix, { fontSize: rFont(14, 13, 17) }]}>+91</Text>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  styles.phoneInput,
+                  phoneLocked && styles.textInputLocked,
+                  { fontSize: rFont(14, 13, 17) },
+                ]}
+                placeholder={phoneLocked ? '' : '10-digit mobile number'}
+                placeholderTextColor="#6B6B6B"
+                value={mobileNumber}
+                onChangeText={(text) => {
+                  if (phoneLocked || phoneStep === 'otp') return;
+                  setMobileNumber(stripDigits(text).slice(0, 10));
+                  setPhoneError(null);
+                }}
+                keyboardType="phone-pad"
+                editable={!phoneLocked && phoneStep !== 'otp' && !isUpdatingProfile && !phoneBusy}
+                textAlignVertical="center"
+                maxLength={10}
+              />
+              {phoneLocked ? (
+                <View style={styles.lockBadge}>
+                  <Ionicons name="lock-closed" size={14} color="#6B6B6B" />
+                  <Text style={styles.lockBadgeText}>Verified</Text>
+                </View>
+              ) : null}
+            </View>
+            {phoneLocked ? (
+              <Text style={[styles.phoneHint, { fontSize: rFont(12, 11, 14) }]}>
+                Verified phone numbers cannot be changed. Contact support for account recovery.
+              </Text>
+            ) : phoneStep === 'otp' ? (
+              <View style={styles.otpBlock}>
+                <Text style={[styles.phoneHint, { fontSize: rFont(12, 11, 14) }]}>
+                  Enter the code sent to +91 {normalizeAuthPhone(mobileNumber)}
+                </Text>
+                <View style={styles.otpRow}>
+                  {otpDigits.map((digit, index) => (
+                    <TextInput
+                      key={index}
+                      ref={(el) => {
+                        otpInputRefs.current[index] = el;
+                      }}
+                      style={[styles.otpBox, { fontSize: rFont(18, 16, 20) }]}
+                      value={digit}
+                      onChangeText={(text) => {
+                        const nextDigit = stripDigits(text).slice(-1);
+                        const next = [...otpDigits];
+                        next[index] = nextDigit;
+                        setOtpDigits(next);
+                        setPhoneError(null);
+                        if (nextDigit && index < 3) {
+                          otpInputRefs.current[index + 1]?.focus();
+                        }
+                      }}
+                      onKeyPress={({ nativeEvent }) => {
+                        if (nativeEvent.key === 'Backspace' && !otpDigits[index] && index > 0) {
+                          otpInputRefs.current[index - 1]?.focus();
+                        }
+                      }}
+                      keyboardType="number-pad"
+                      maxLength={1}
+                      editable={!phoneBusy}
+                    />
+                  ))}
+                </View>
+                {phoneError ? <Text style={styles.phoneError}>{phoneError}</Text> : null}
+                <Text style={[styles.phoneHint, { fontSize: rFont(12, 11, 14) }]}>
+                  {otpCooldown > 0 ? `00:${String(otpCooldown).padStart(2, '0')} ` : ''}
+                  Didn't get a code?{' '}
+                  <Text
+                    style={[
+                      styles.resendLink,
+                      (otpCooldown > 0 || phoneBusy) && styles.resendLinkDisabled,
+                    ]}
+                    onPress={() => {
+                      if (otpCooldown > 0 || phoneBusy) return;
+                      void handleResendPhoneOtp();
+                    }}
+                  >
+                    Resend
+                  </Text>
+                </Text>
+                <View style={styles.phoneActions}>
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, phoneBusy && styles.updateButtonDisabled]}
+                    onPress={() => {
+                      setPhoneStep('idle');
+                      setPhoneError(null);
+                    }}
+                    disabled={phoneBusy}
+                  >
+                    <Text style={[styles.secondaryButtonText, { fontSize: rFont(13, 12, 15) }]}>
+                      Change number
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.verifyButton, styles.phoneActionFlex, phoneBusy && styles.updateButtonDisabled]}
+                    onPress={() => void handleVerifyPhoneOtp()}
+                    disabled={phoneBusy}
+                  >
+                    <Text style={[styles.updateButtonText, { fontSize: rFont(13, 12, 15) }]}>
+                      {phoneBusy ? 'Verifying...' : 'Verify Phone Number'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <>
+                {phoneError ? <Text style={styles.phoneError}>{phoneError}</Text> : null}
+                <TouchableOpacity
+                  style={[
+                    styles.verifyButton,
+                    (phoneBusy ||
+                      isUpdatingProfile ||
+                      !validatePhone(normalizeAuthPhone(mobileNumber), 'IN', 'mobile').valid) &&
+                      styles.updateButtonDisabled,
+                  ]}
+                  onPress={() => void handleSendPhoneOtp()}
+                  disabled={
+                    phoneBusy ||
+                    isUpdatingProfile ||
+                    !validatePhone(normalizeAuthPhone(mobileNumber), 'IN', 'mobile').valid
+                  }
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.updateButtonText, { fontSize: rFont(13, 12, 15) }]}>
+                    {phoneBusy
+                      ? 'Sending...'
+                      : hasLinkedPhone
+                        ? 'Verify Phone Number'
+                        : 'Add Phone Number'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
           {/* Email Address Input */}
           <View style={styles.inputContainer}>
             <View style={styles.labelContainer}>
-              <Text style={styles.label}>Email Adress*</Text>
+              <Text style={[styles.label, { fontSize: rFont(14, 13, 17) }]}>Email Adress*</Text>
             </View>
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput, { fontSize: rFont(14, 13, 17) }]}
               placeholder="Enter Details"
               placeholderTextColor="#6B6B6B"
               value={emailAddress}
@@ -311,7 +652,7 @@ const Profile: React.FC = () => {
           </View>
 
           {/* Privacy Message */}
-          <Text style={styles.privacyText}>We promise not spam you</Text>
+          <Text style={[styles.privacyText, { fontSize: rFont(14, 13, 16) }]}>We promise not spam you</Text>
 
           {/* Update Button */}
           <TouchableOpacity
@@ -320,7 +661,7 @@ const Profile: React.FC = () => {
             disabled={isUpdatingProfile}
             activeOpacity={0.8}
           >
-            <Text style={styles.updateButtonText}>
+            <Text style={[styles.updateButtonText, { fontSize: rFont(14, 13, 17) }]}>
               {isUpdatingProfile ? 'Updating...' : 'Update'}
             </Text>
           </TouchableOpacity>
@@ -352,9 +693,62 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   formContainer: {
+    width: '100%',
     paddingVertical: 20,
     paddingHorizontal: 16,
     gap: 16,
+  },
+  formContainerTablet: {
+    maxWidth: 520,
+    alignSelf: 'center',
+  },
+  avatarWrap: {
+    alignSelf: 'center',
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    marginBottom: 4,
+  },
+  avatarImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#E8E8E8',
+  },
+  avatarFallback: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#034703',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  avatarBadge: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#1a7a2c',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 40,
+    alignItems: 'center',
+  },
+  avatarBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  avatarHint: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#828282',
+    marginBottom: 8,
   },
   inputContainer: {
     width: '100%',
@@ -386,6 +780,122 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     minHeight: 44,
     includeFontPadding: false,
+  },
+  phoneRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D4D4D4',
+    borderRadius: 3.5,
+    paddingLeft: 12,
+    paddingRight: 8,
+    minHeight: 44,
+  },
+  phoneRowLocked: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#E5E5E5',
+  },
+  phonePrefix: {
+    color: '#6B6B6B',
+    fontWeight: '500',
+    marginRight: 6,
+  },
+  phoneInput: {
+    flex: 1,
+    width: undefined,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    paddingLeft: 0,
+    paddingRight: 0,
+    minHeight: 42,
+  },
+  textInputLocked: {
+    color: '#6B6B6B',
+  },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EEEEEE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  lockBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B6B6B',
+  },
+  phoneHint: {
+    color: '#828282',
+    marginTop: 6,
+  },
+  phoneError: {
+    color: '#C62828',
+    fontSize: 12,
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  otpBlock: {
+    marginTop: 8,
+    gap: 10,
+  },
+  otpRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  otpBox: {
+    flex: 1,
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#D4D4D4',
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    textAlign: 'center',
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  verifyButton: {
+    width: '100%',
+    backgroundColor: '#034703',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  phoneActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  secondaryButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D4D4D4',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    color: '#444444',
+    fontWeight: '600',
+  },
+  phoneActionFlex: {
+    flex: 1,
+    marginTop: 0,
+  },
+  resendLink: {
+    color: '#034703',
+    fontWeight: '700',
+  },
+  resendLinkDisabled: {
+    opacity: 0.45,
   },
   privacyText: {
     fontWeight: '400',

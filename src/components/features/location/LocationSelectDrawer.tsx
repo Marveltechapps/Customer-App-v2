@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   Animated,
-  Dimensions,
+  useWindowDimensions,
   Easing,
   ActivityIndicator,
   ScrollView,
@@ -17,9 +17,10 @@ import { Colors } from '../../../constants/Colors';
 import { Theme } from '../../../constants/Theme';
 import { logger } from '@/utils/logger';
 import { notifyAddressesChanged, subscribeAddressesChanged } from '../../../utils/addressRefresh';
+import { useResponsive } from '@/utils/responsive';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const DRAWER_MAX_HEIGHT = SCREEN_HEIGHT * 0.55;
+/** Off-screen start position for the slide-up animation (larger than any real drawer height). */
+const OFFSCREEN_OFFSET = 1000;
 const BACKDROP_OPACITY = 0.5;
 const DRAG_THRESHOLD = 80;
 
@@ -48,7 +49,11 @@ export default function LocationSelectDrawer({
   onSelect,
   onAddNew,
 }: LocationSelectDrawerProps) {
-  const translateY = useRef(new Animated.Value(DRAWER_MAX_HEIGHT)).current;
+  const { height: windowHeight } = useWindowDimensions();
+  const { isTablet, scaleFont: rFont } = useResponsive();
+  const drawerMaxHeight = windowHeight * (isTablet ? 0.65 : 0.55);
+  const listMaxHeight = windowHeight * (isTablet ? 0.36 : 0.28);
+  const translateY = useRef(new Animated.Value(OFFSCREEN_OFFSET)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(false);
@@ -100,7 +105,7 @@ export default function LocationSelectDrawer({
     closingAnimRef.current = true;
     Animated.parallel([
       Animated.timing(translateY, {
-        toValue: DRAWER_MAX_HEIGHT,
+        toValue: OFFSCREEN_OFFSET,
         duration: CLOSE_MS,
         easing: EASE_IN_CLOSE,
         useNativeDriver: true,
@@ -196,14 +201,15 @@ export default function LocationSelectDrawer({
       <Animated.View
         style={[
           styles.drawer,
-          { maxHeight: DRAWER_MAX_HEIGHT, transform: [{ translateY }] },
+          isTablet && styles.drawerTablet,
+          { maxHeight: drawerMaxHeight, transform: [{ translateY }] },
         ]}
         {...panResponder.panHandlers}
       >
         <View style={styles.handleBar} />
 
         <View style={styles.headerRow}>
-          <Text style={styles.title}>Choose delivery location</Text>
+          <Text style={[styles.title, { fontSize: rFont(18, 16, 22) }]}>Choose delivery location</Text>
           <TouchableOpacity
             style={styles.addButton}
             activeOpacity={0.7}
@@ -213,7 +219,7 @@ export default function LocationSelectDrawer({
             <Text style={styles.addButtonText}>New</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.subtitle, { fontSize: rFont(13, 12, 16) }]}>
           Select an address for delivery
         </Text>
 
@@ -231,7 +237,7 @@ export default function LocationSelectDrawer({
           </View>
         ) : (
           <ScrollView
-            style={styles.list}
+            style={[styles.list, { maxHeight: listMaxHeight }]}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             bounces={false}
@@ -301,6 +307,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: Theme.spacing.md,
     paddingBottom: 34,
   },
+  drawerTablet: {
+    left: undefined,
+    right: undefined,
+    width: '70%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
   handleBar: {
     width: 40,
     height: 4,
@@ -350,9 +363,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
   },
-  list: {
-    maxHeight: SCREEN_HEIGHT * 0.28,
-  },
+  list: {},
   listContent: {
     gap: 10,
     paddingBottom: 4,

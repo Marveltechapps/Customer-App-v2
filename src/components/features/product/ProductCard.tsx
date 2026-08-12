@@ -26,6 +26,8 @@ import {
 import { shouldUseLocalPlaceholder } from '@/config/placeholder';
 import { addOrIncrementCartLine } from '@/utils/cartActions';
 import { buildCartItemPayload, resolveProductCartLine } from '@/utils/productCardCart';
+import { scaleFont } from '@/utils/responsive';
+import { canIncreaseCartQty, maxOrderLimitMessage } from '@/utils/cartConstants';
 
 /** Remote or placeholder sentinel URI for CmsRemoteImage (not for native Image URL loading). */
 function remoteDisplayUri(src: ImageSourcePropType): string | null {
@@ -54,6 +56,8 @@ export interface Product {
   hierarchyCode?: string;
   /** Raw catalog image fields — used for master-sheet error logs when the image fails to load. */
   imageCatalog?: Pick<ProductLikeImageInput, 'thumbnailUrl' | 'cardImageUrl' | 'imageUrl' | 'images'>;
+  /** Master Sheet MaxOrderLimit — null = unlimited */
+  maxOrderLimit?: number | null;
 }
 
 interface ProductCardProps {
@@ -128,6 +132,15 @@ export default function ProductCard({
   const imageWrapperHeight = 111 * scaleFactor;
   const imageHeight = imageWrapperHeight + quantityRowHeight;
   const addButtonWidth = 127 * scaleFactor;
+
+  // Soft-capped font scale — grows/shrinks with card width but never runs away on tablets.
+  const fontScale = width ? Math.min(Math.max(scaleFactor, 0.85), 1.3) : 1;
+  const productNameFontSize = scaleFont(12 * fontScale, 10, 15);
+  const discountFontSize = scaleFont(12 * fontScale, 10, 14);
+  const currentPriceFontSize = scaleFont(14 * fontScale, 12, 18);
+  const originalPriceFontSize = scaleFont(10 * fontScale, 9, 13);
+  const addButtonFontSize = scaleFont(14 * fontScale, 12, 18);
+  const quantityFontSize = scaleFont(12 * fontScale, 10, 14);
   const handleQuantityPress = useCallback(() => {
     // Always open modal/dropdown when clicking quantity selector
     if (onCardPress) {
@@ -168,10 +181,12 @@ export default function ProductCard({
 
   const handleAddButtonIncrease = useCallback((e: any) => {
     e?.stopPropagation?.();
-    if (cartQuantity >= 0) {
+    if (cartQuantity >= 0 && canIncreaseCartQty(cartQuantity, product.maxOrderLimit)) {
       updateQuantity(lineProductId, lineVariantId, cartQuantity + 1);
     }
-  }, [lineProductId, lineVariantId, cartQuantity, updateQuantity]);
+  }, [lineProductId, lineVariantId, cartQuantity, updateQuantity, product.maxOrderLimit]);
+
+  const limitLabel = maxOrderLimitMessage(product.maxOrderLimit);
 
   const productImageCandidates = useMemo(
     () =>
@@ -187,7 +202,7 @@ export default function ProductCard({
   const imageFit = getImageFitFromUrl(productImageUri);
 
   return (
-    <View style={[styles.container, width ? { width, maxWidth: width } : null]}>
+    <View style={[styles.container, width ? { width, maxWidth: '100%' } : null]}>
       {/* Product Image Container - Fixed 139px height from Figma (scaled when width prop set) */}
       <View
         style={[
@@ -258,7 +273,7 @@ export default function ProductCard({
         >
           <View style={styles.quantityTextContainer}>
             <Text
-              style={styles.quantityText}
+              style={[styles.quantityText, { fontSize: quantityFontSize }]}
               numberOfLines={1}
             >
               {variantSize}
@@ -274,7 +289,7 @@ export default function ProductCard({
       <TouchableOpacity style={styles.infoContainer} onPress={handleProductPress} activeOpacity={0.9}>
         {/* Product Name */}
         <View style={styles.nameContainer}>
-          <Text style={styles.productName} numberOfLines={1}>
+          <Text style={[styles.productName, { fontSize: productNameFontSize }]} numberOfLines={1}>
             {product.name}
           </Text>
         </View>
@@ -283,7 +298,7 @@ export default function ProductCard({
         <View style={styles.priceDiscountContainer}>
           {/* Discount Badge */}
           <View style={styles.discountContainer}>
-            <Text style={styles.discountText}>{product.discount}</Text>
+            <Text style={[styles.discountText, { fontSize: discountFontSize }]}>{product.discount}</Text>
           </View>
 
           {/* Price Row */}
@@ -294,7 +309,7 @@ export default function ProductCard({
                 <RupeeIcon size={10} color="#222222" />
               </View>
               <View style={styles.priceTextContainer}>
-                <Text style={styles.currentPrice}>{displayPrice}</Text>
+                <Text style={[styles.currentPrice, { fontSize: currentPriceFontSize }]}>{displayPrice}</Text>
               </View>
             </View>
 
@@ -305,13 +320,19 @@ export default function ProductCard({
                   <RupeeIcon size={6} color="#777777" />
                 </View>
                 <View style={styles.originalPriceTextContainer}>
-                  <Text style={styles.originalPrice}>{displayOriginal}</Text>
+                  <Text style={[styles.originalPrice, { fontSize: originalPriceFontSize }]}>{displayOriginal}</Text>
                   <View style={styles.strikethroughLine} />
                 </View>
               </View>
             </View>
           </View>
         </View>
+
+        {limitLabel ? (
+          <Text style={styles.limitLabel} numberOfLines={1}>
+            {limitLabel}
+          </Text>
+        ) : null}
 
         {/* Add Button or Quantity Selector - ONLY Add Button Section */}
         {hasQuantity ? (
@@ -325,7 +346,12 @@ export default function ProductCard({
               <MinusIcon width={20} height={20} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.addButtonQuantityDisplay}>
-              <Text style={styles.addButtonQuantityText} numberOfLines={1} adjustsFontSizeToFit={true} minimumFontScale={0.8}>
+              <Text
+                style={[styles.addButtonQuantityText, { fontSize: addButtonFontSize }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit={true}
+                minimumFontScale={0.8}
+              >
                 {String(cartQuantity)}
               </Text>
             </View>
@@ -348,7 +374,7 @@ export default function ProductCard({
             onPress={handleAddPress}
             activeOpacity={0.8}
           >
-            <Text style={styles.addButtonText}>Add</Text>
+            <Text style={[styles.addButtonText, { fontSize: addButtonFontSize }]}>Add</Text>
           </TouchableOpacity>
         )}
       </TouchableOpacity>
@@ -493,6 +519,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 18,
     color: '#FF8C00',
+  },
+  limitLabel: {
+    color: '#555555',
+    fontSize: 10,
+    marginTop: 2,
+    marginBottom: 2,
+    paddingHorizontal: 2,
   },
   priceRow: {
     flexDirection: 'row',

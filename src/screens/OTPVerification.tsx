@@ -24,10 +24,14 @@ import { useDimensions, scale, scaleFont, getSpacing, getBorderRadius, wp } from
 import { logger } from '@/utils/logger';
 import { getApiErrorMessage } from '../services/api/types';
 import { addressService } from '../services/address/addressService';
+import { migrateGuestAddressesOnLogin } from '../services/address/migrateGuestAddresses';
 import { AuthLayout } from '@/constants/authTheme';
 import { loadPendingOtpSession, clearPendingOtpSession } from '@/utils/pendingOtpSession';
 import type { LoginMode } from '@/services/auth/authService';
 import { APP_LAUNCH_ID } from '@/constants/appLaunch';
+import { useUser } from '../contexts/UserContext';
+import * as storage from '../utils/storage';
+import { completePostAuthNavigation } from '../navigation/authNavigation';
 
 type OTPVerificationRouteProp = RouteProp<RootStackParamList, 'OTPVerification'>;
 
@@ -37,6 +41,7 @@ const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<OTPVerificationRouteProp>();
   const routeParams = route.params ?? { phoneNumber: '' };
+  const { setUser } = useUser();
 
   const [sessionMeta, setSessionMeta] = useState({
     displayTarget: routeParams.displayTarget || routeParams.phoneNumber || '',
@@ -206,7 +211,9 @@ const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
       try {
         await tokenManager.initialize();
         if (mounted && tokenManager.isTokenValid()) {
-          navigation.replace('MainTabs');
+          completePostAuthNavigation(navigation, {
+            returnTo: routeParams.returnTo,
+          });
         }
       } catch {
         // ignore
@@ -214,7 +221,7 @@ const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
     };
     check();
     return () => { mounted = false; };
-  }, [navigation]);
+  }, [navigation, routeParams.returnTo]);
 
   // Animations on mount
   useEffect(() => {
@@ -484,15 +491,45 @@ const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
 
       if (resp && resp.data && resp.data.accessToken) {
         logger.info('OTP verified successfully, navigating to main app');
+        // Populate UserContext so post-login push/FCM registration runs immediately.
+        if (resp.data.user) {
+          setUser(resp.data.user);
+        } else {
+          try {
+            const raw = await storage.getUserData();
+            if (raw) setUser(JSON.parse(raw));
+          } catch {
+            // Tokens are set; session restore on next launch will recover user.
+          }
+        }
         try {
-          const addrRes = await addressService.getAll();
-          if (addrRes?.success && addrRes.data && addrRes.data.length > 0) {
-            navigation.replace('MainTabs');
+          const userKeyHint =
+            resp.data.user?.phoneNumber?.replace(/\D/g, '') ||
+            resp.data.user?._id ||
+            undefined;
+          const migrated = await migrateGuestAddressesOnLogin(userKeyHint);
+          if (migrated.hasAddresses) {
+            completePostAuthNavigation(navigation, {
+              returnTo: routeParams.returnTo,
+            });
           } else {
-            navigation.replace('LocationPermission', { fromAuth: true });
+            const addrRes = await addressService.getAll();
+            if (addrRes?.success && addrRes.data && addrRes.data.length > 0) {
+              completePostAuthNavigation(navigation, {
+                returnTo: routeParams.returnTo,
+              });
+            } else {
+              completePostAuthNavigation(navigation, {
+                returnTo: routeParams.returnTo,
+                needsLocation: true,
+              });
+            }
           }
         } catch {
-          navigation.replace('LocationPermission', { fromAuth: true });
+          completePostAuthNavigation(navigation, {
+            returnTo: routeParams.returnTo,
+            needsLocation: true,
+          });
         }
       } else {
         setError((resp as any)?.message || 'Invalid OTP. Please try again.');
@@ -539,6 +576,7 @@ const OTPVerification: React.FC<OTPVerificationScreenProps> = () => {
       email: sessionMeta.email || undefined,
       phone: sessionMeta.phone || undefined,
       countryCode: sessionMeta.countryCode || undefined,
+      returnTo: routeParams.returnTo,
     });
   };
 

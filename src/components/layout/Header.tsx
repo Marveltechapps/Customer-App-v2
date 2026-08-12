@@ -14,9 +14,10 @@ interface HeaderProps {
   };
   itemCount?: string;
   onAddMorePress?: () => void;
+  rightComponent?: React.ReactNode;
 }
 
-const Header: React.FC<HeaderProps> = ({ title, onBackPress, showBackButton: showBackButtonProp, titleStyle, itemCount, onAddMorePress }) => {
+const Header: React.FC<HeaderProps> = ({ title, onBackPress, showBackButton: showBackButtonProp, titleStyle, itemCount, onAddMorePress, rightComponent }) => {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
 
   const handleBackPress = () => {
@@ -73,6 +74,7 @@ const Header: React.FC<HeaderProps> = ({ title, onBackPress, showBackButton: sho
           <Text style={styles.addMoreButtonText}>+ Add More</Text>
         </TouchableOpacity>
       )}
+      {rightComponent ? <View style={styles.rightSlot}>{rightComponent}</View> : null}
     </View>
   );
 };
@@ -107,6 +109,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     gap: 0,
+  },
+  rightSlot: {
+    marginLeft: 8,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
   title: {
     fontWeight: '600',

@@ -21,11 +21,11 @@ export const products = {
   // Product images are in products/ subfolder
 };
 
-// Onboarding
+// Onboarding (final production assets)
 export const onboarding = {
-  screen1: require('./onboarding/onboarding-screen-1.png'),
-  screen2: require('./onboarding/onboarding-screen-2.png'),
-  screen3: require('./onboarding/onboarding-screen-3.png'),
+  screen1: require('./onboarding/onboarding-screen-1.jpg'),
+  screen2: require('./onboarding/onboarding-screen-2.jpg'),
+  screen3: require('./onboarding/onboarding-screen-3.jpg'),
 };
 
 // Common/Shared images

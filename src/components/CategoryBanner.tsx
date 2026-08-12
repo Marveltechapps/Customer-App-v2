@@ -1,6 +1,21 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Image, ImageSourcePropType, NativeScrollEvent, NativeSyntheticEvent, TouchableOpacity } from 'react-native';
-import { getWindowDimensions, scale, getSpacing } from '../utils/responsive';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Image,
+  ImageSourcePropType,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  TouchableOpacity,
+} from 'react-native';
+import {
+  useDimensions,
+  scale,
+  getSpacing,
+  resolveBannerSlideHeight,
+  getBannerAspectRatio,
+} from '../utils/responsive';
 
 export interface CategoryBannerItem {
   id: string;
@@ -16,37 +31,36 @@ interface CategoryBannerProps {
 export default function CategoryBanner({ banners, onBannerPress }: CategoryBannerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
-  
-  // Responsive banner dimensions
+  const { width: screenWidth } = useDimensions();
+
+  // Responsive banner dimensions — recomputed live on rotation/resize.
   const bannerDimensions = useMemo(() => {
-    const screenWidth = getWindowDimensions().width;
-    
-    // Calculate banner width to fit within viewport
-    // Products container has padding: 8px
-    // Banner container has padding: 8px left + 8px right = 16px
-    // So available width = screenWidth - 72 (sidebar) - 8 (products padding) - 16 (banner padding) = screenWidth - 96
-    const sidebarWidth = scale(72);
-    const productsPadding = getSpacing(8); // Left padding in products container
-    const bannerContainerPadding = getSpacing(20); // 8px left + 8px right in banner container
-    const bannerGap = getSpacing(8); // Gap between banners
-    
-    // Calculate available width for banner
-    const availableWidth = screenWidth - sidebarWidth - productsPadding - bannerContainerPadding;
-    
-    // Banner should fit within available width
-    // Use 269 as max width (design spec), but scale down if needed to fit viewport
-    const maxBannerWidth = scale(269);
+    const sidebarWidth = scale(72, screenWidth);
+    const productsPadding = getSpacing(8, screenWidth);
+    const bannerContainerPadding = getSpacing(20, screenWidth);
+    const bannerGap = getSpacing(8, screenWidth);
+
+    const availableWidth =
+      screenWidth - sidebarWidth - productsPadding - bannerContainerPadding;
+
+    const maxBannerWidth = scale(269, screenWidth);
     const bannerWidth = Math.min(maxBannerWidth, availableWidth);
-    const bannerHeight = Math.round((bannerWidth * 146) / 269); // Maintain aspect ratio
-    
+    const bannerHeight = resolveBannerSlideHeight(bannerWidth, {
+      variant: 'secondary',
+      screenWidth,
+    });
+    const aspect =
+      bannerWidth > 0 ? bannerWidth / bannerHeight : getBannerAspectRatio('secondary');
+
     return {
       bannerWidth,
       bannerHeight,
       bannerGap,
+      aspect,
     };
-  }, []);
-  
-  const { bannerWidth, bannerHeight, bannerGap } = bannerDimensions;
+  }, [screenWidth]);
+
+  const { bannerWidth, bannerHeight, bannerGap, aspect } = bannerDimensions;
 
   if (banners.length === 0) {
     return null;
@@ -74,21 +88,27 @@ export default function CategoryBanner({ banners, onBannerPress }: CategoryBanne
           snapToAlignment="start"
           decelerationRate="fast"
         >
-          {banners.map((banner, index) => (
+          {banners.map((banner) => (
             <TouchableOpacity
               key={banner.id}
-              style={[styles.bannerItem, { width: bannerWidth, height: bannerHeight }]}
+              style={[
+                styles.bannerItem,
+                { width: bannerWidth, aspectRatio: aspect },
+              ]}
               onPress={() => onBannerPress?.(banner)}
               activeOpacity={onBannerPress ? 0.8 : 1}
               disabled={!onBannerPress}
             >
-              <Image source={banner.image} style={[styles.bannerImage, { width: bannerWidth, height: bannerHeight }]} resizeMode="stretch" />
+              <Image
+                source={banner.image}
+                style={styles.bannerImage}
+                resizeMode="cover"
+              />
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
-      {/* Pagination Dots */}
       {banners.length > 1 && (
         <View style={styles.paginationContainer}>
           {banners.map((_, index) => (
@@ -115,7 +135,6 @@ const styles = StyleSheet.create({
   },
   bannerContainer: {
     width: '100%',
-    height: 146,
   },
   scrollContent: {
     alignItems: 'center',
@@ -125,8 +144,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 8,
     overflow: 'hidden',
+    backgroundColor: '#EDEDED',
   },
   bannerImage: {
+    width: '100%',
+    height: '100%',
     borderRadius: 8,
   },
   paginationContainer: {
@@ -142,7 +164,7 @@ const styles = StyleSheet.create({
   paginationDotActive: {
     width: 16,
     height: 8,
-    backgroundColor: '#034703', // Green color for active indicator
+    backgroundColor: '#034703',
   },
   paginationDotInactive: {
     width: 8,
@@ -150,4 +172,3 @@ const styles = StyleSheet.create({
     backgroundColor: '#BABABA',
   },
 });
-

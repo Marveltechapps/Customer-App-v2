@@ -9,7 +9,7 @@ type Props = {
   title?: string;
   id?: string | number;
   style?: StyleProp<ViewStyle>;
-  contentFit: 'cover' | 'contain' | 'fill' | 'none';
+  contentFit: 'cover' | 'contain';
   transition?: number;
   priority?: CmsImagePriority;
   recyclingKey?: string;

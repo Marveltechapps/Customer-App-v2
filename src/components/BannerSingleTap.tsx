@@ -1,10 +1,18 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { RootStackNavigationProp } from '../types/navigation';
 import { bannerIsTapEnabled } from '@/utils/bannerInteraction';
 import { handleRedirect } from '../utils/navigation/linkHandler';
 import BannerMedia from './BannerMedia';
+import {
+  resolveBannerContentFit,
+  resolveBannerSlideHeight,
+  getBannerAspectRatio,
+  scale,
+  Spacing,
+  useResponsive,
+} from '../utils/responsive';
 
 type BlockStyle = { borderRadius?: number; height?: number };
 
@@ -20,22 +28,65 @@ type Props = {
 /**
  * Single full-width banner tap target — used when carousel is disabled in CMS.
  */
-export default function BannerSingleTap({ banner, layout, blockStyle, isFirstBannerBlock = false }: Props) {
+export default function BannerSingleTap({
+  banner,
+  layout,
+  blockStyle,
+  isFirstBannerBlock = false,
+}: Props) {
   const navigation = useNavigation<RootStackNavigationProp>();
+  const { width: windowWidth } = useResponsive();
   const item = banner as Record<string, unknown>;
   const isHero = layout === 'hero';
-  const defaultHeight = isHero ? 340 : 198;
-  const defaultRadius = isHero ? 12 : 8;
-  const padH = isHero ? 12 : 16;
+  const variant = isHero ? 'hero' : 'secondary';
+  const padH = Spacing.lg(windowWidth);
+  const padV = Spacing.xl(windowWidth);
+  const slideWidth = Math.max(0, windowWidth - padH * 2);
 
-  const bannerIdStr = item._id != null ? String(item._id) : item.id != null ? String(item.id) : '';
+  const preferredHeightRaw = Number(
+    (item.dimensions as { preferredHeight?: number } | undefined)?.preferredHeight,
+  );
+  const preferredHeight =
+    Number.isFinite(preferredHeightRaw) && preferredHeightRaw > 0
+      ? preferredHeightRaw
+      : undefined;
+
+  const height = useMemo(
+    () =>
+      resolveBannerSlideHeight(slideWidth, {
+        variant,
+        aspectRatio: item.aspectRatio as string | number | null | undefined,
+        preferredHeight,
+        blockHeight: blockStyle?.height,
+        screenWidth: windowWidth,
+      }),
+    [slideWidth, variant, item.aspectRatio, preferredHeight, blockStyle?.height, windowWidth],
+  );
+  const aspect =
+    slideWidth > 0
+      ? slideWidth / height
+      : getBannerAspectRatio(variant, item.aspectRatio as string | number | null | undefined);
+  const defaultRadius = isHero ? scale(12, windowWidth) : scale(8, windowWidth);
+  const borderRadius =
+    blockStyle?.borderRadius != null
+      ? scale(blockStyle.borderRadius, windowWidth)
+      : defaultRadius;
+
+  const bannerIdStr =
+    item._id != null ? String(item._id) : item.id != null ? String(item.id) : '';
 
   const handlePress = () => {
     if (!bannerIsTapEnabled(item)) {
       return;
     }
     if (item.redirectType && item.redirectValue) {
-      handleRedirect({ redirectType: item.redirectType as string, redirectValue: item.redirectValue as string }, navigation);
+      handleRedirect(
+        {
+          redirectType: item.redirectType as string,
+          redirectValue: item.redirectValue as string,
+        },
+        navigation,
+      );
       return;
     }
     if (item.link) {
@@ -52,13 +103,11 @@ export default function BannerSingleTap({ banner, layout, blockStyle, isFirstBan
     navigation.navigate('BannerDetail', { title: 'Banner' });
   };
 
-  const height = blockStyle?.height ?? defaultHeight;
-  const borderRadius = blockStyle?.borderRadius ?? defaultRadius;
-
   const tap = bannerIsTapEnabled(item);
-
   const imageId = bannerIdStr || 'banner';
-  const contentFit: 'fill' = 'fill';
+  const contentFit = resolveBannerContentFit(
+    typeof item.contentFit === 'string' ? item.contentFit : undefined,
+  );
   const imageProps = {
     imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : undefined,
     uri: typeof item.uri === 'string' ? item.uri : undefined,
@@ -71,10 +120,10 @@ export default function BannerSingleTap({ banner, layout, blockStyle, isFirstBan
   };
 
   return (
-    <View style={[styles.wrap, { paddingHorizontal: padH }]}>
+    <View style={[styles.wrap, { paddingHorizontal: padH, paddingVertical: padV }]}>
       {tap ? (
         <TouchableOpacity
-          style={[styles.box, { height, borderRadius }]}
+          style={[styles.box, { aspectRatio: aspect, borderRadius }]}
           onPress={handlePress}
           activeOpacity={0.9}
         >
@@ -84,7 +133,7 @@ export default function BannerSingleTap({ banner, layout, blockStyle, isFirstBan
           />
         </TouchableOpacity>
       ) : (
-        <View style={[styles.box, { height, borderRadius }]}>
+        <View style={[styles.box, { aspectRatio: aspect, borderRadius }]}>
           <BannerMedia
             {...imageProps}
             videoUrl={typeof item.videoUrl === 'string' ? item.videoUrl : undefined}
@@ -98,11 +147,11 @@ export default function BannerSingleTap({ banner, layout, blockStyle, isFirstBan
 const styles = StyleSheet.create({
   wrap: {
     width: '100%',
-    paddingVertical: 20,
   },
   box: {
     width: '100%',
     overflow: 'hidden',
+    backgroundColor: '#EDEDED',
   },
   img: {
     width: '100%',

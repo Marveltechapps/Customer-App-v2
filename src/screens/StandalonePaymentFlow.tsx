@@ -12,6 +12,7 @@ import {
   buildWorldlineCompletePayload,
 } from '../services/payments/worldlineCheckout';
 import { logger } from '@/utils/logger';
+import { markSplashCompleted } from '@/constants/appLaunch';
 
 export type StandaloneSession = NonNullable<RootStackParamList['Payment']>['standaloneSession'];
 
@@ -171,7 +172,10 @@ const StandalonePaymentFlow: React.FC<Props> = ({ standalone, navigation }) => {
 
   const retry = () => setAttempt((a) => a + 1);
 
-  const goLogin = () => navigation.replace('Splash', { next: 'Login' });
+  const goLogin = () => {
+    markSplashCompleted();
+    navigation.replace('Login', { fromSplash: 'payment' });
+  };
 
   const goBack = () => navigation.goBack();
 

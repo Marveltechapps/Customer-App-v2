@@ -1,4 +1,4 @@
-package com.selorg.mobile
+package com.selorg.com
 
 import android.app.Application
 import android.content.res.Configuration

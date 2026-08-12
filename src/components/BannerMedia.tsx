@@ -10,7 +10,7 @@ type Props = {
   title: string;
   id: string | number;
   style: any;
-  contentFit: 'cover' | 'contain' | 'fill' | 'none';
+  contentFit: 'cover' | 'contain';
   priority?: 'high' | 'normal' | 'low';
   recyclingKey?: string;
 };
@@ -24,7 +24,7 @@ function LoopingMutedVideo({
 }: {
   videoUrl: string;
   style: any;
-  contentFit: 'cover' | 'contain' | 'fill' | 'none';
+  contentFit: 'cover' | 'contain';
 }) {
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;

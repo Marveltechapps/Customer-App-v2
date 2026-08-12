@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "297027140755",
+    "project_id": "selorg-app",
+    "storage_bucket": "selorg-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:297027140755:android:9d8837878874a1590e6166",
+        "android_client_info": {
+          "package_name": "com.selorg.com"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDb5y8M5Lmp9cXLQ-7prNFXbxEjCKgopRI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

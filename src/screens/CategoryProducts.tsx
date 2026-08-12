@@ -17,13 +17,16 @@ import SearchIcon from '../components/icons/SearchIcon';
 import Text from '../components/common/Text';
 import SubCategoryItem from '../components/SubCategoryItem';
 import CategoryBanner from '../components/CategoryBanner';
+import CategoryMediaBlock from '../components/CategoryMediaBlock';
 import ProductCard, { Product } from '../components/features/product/ProductCard';
 import FloatingCartBar from '../components/features/cart/FloatingCartBar';
 import ProductVariantModal, { ProductVariant } from '../components/features/product/ProductVariantModal';
 import { useCart } from '@/contexts/CartContext';
-import { useDimensions, getSpacing, scale, getTwoColumnCardWidth } from '../utils/responsive';
+import { useDimensions, getSpacing, scale } from '../utils/responsive';
 import { logger } from '@/utils/logger';
-import categoryService, { type CategoryPayloadProduct } from '../services/category/categoryService';
+import categoryService, {
+  type CategoryPayloadProduct,
+} from '../services/category/categoryService';
 import { handleHomeLink, handleRedirect } from '../utils/navigation/linkHandler';
 import { bannerIsTapEnabled } from '@/utils/bannerInteraction';
 import { getApiErrorMessage } from '../services/api/types';
@@ -44,6 +47,9 @@ interface SubCategory {
   thumbnailUrl?: string | null;
   cardImageUrl?: string | null;
   slug?: string;
+  bannerImage?: string | null;
+  bannerVideo?: string | null;
+  youtubeUrl?: string | null;
 }
 
 interface BannerItem {
@@ -141,6 +147,7 @@ export default function CategoryProducts({
       discount: formatProductDiscountLabel(p as any),
       quantity: p.quantity || (rows[0]?.size ?? ''),
       variants: rows,
+      maxOrderLimit: p.maxOrderLimit ?? null,
     };
   }, []);
 
@@ -166,6 +173,7 @@ export default function CategoryProducts({
       discount: label || tagFallback,
       quantity: String(p.size ?? p.quantity ?? rows[0]?.size ?? ''),
       variants: rows,
+      maxOrderLimit: p.maxOrderLimit != null ? Number(p.maxOrderLimit) : null,
     };
   }, []);
 
@@ -242,6 +250,9 @@ export default function CategoryProducts({
             imageUrl: s.imageUrl,
             thumbnailUrl: s.thumbnailUrl,
             cardImageUrl: s.cardImageUrl,
+            bannerImage: s.bannerImage ?? null,
+            bannerVideo: s.bannerVideo ?? null,
+            youtubeUrl: s.youtubeUrl ?? null,
           }))
         );
         setBanners(
@@ -600,14 +611,15 @@ export default function CategoryProducts({
 
   const sidebarWidth = scale(72); // Keep aligned with styles.sidebar.width
 
-  // Calculate product card width for 2-column grid (minimum 2 cards per row)
-  const containerPadding = getSpacing(12) * 2; // Left and right padding (from productsContent)
-  const columnGap = getSpacing(16); // Column gap between cards (horizontal)
-  const productCardWidth = Math.floor(getTwoColumnCardWidth(screenWidth, {
-    sidebarWidth,
-    horizontalPadding: containerPadding,
-    columnGap,
-  }) - 0.5); // Subtract 0.5 to ensure it fits in all screen ratios/rounding scenarios
+  // Dynamic product columns: 2 on phones, 3–4 on tablets
+  const productColumns = screenWidth >= 1024 ? 4 : screenWidth >= 768 ? 3 : 2;
+  const containerPadding = getSpacing(12) * 2;
+  const columnGap = getSpacing(16);
+  const productCardWidth = Math.floor(
+    (screenWidth - sidebarWidth - containerPadding - columnGap * (productColumns - 1)) /
+      productColumns -
+      0.5,
+  );
 
   return (
     <View style={styles.container}>
@@ -685,7 +697,28 @@ export default function CategoryProducts({
               ]}
               showsVerticalScrollIndicator={false}
             >
-              {/* Scrollable Banner */}
+              {/* SubCategory media only (Master Sheet "Subcategories" sheet) */}
+              <CategoryMediaBlock
+                media={
+                  (() => {
+                    const selected = subCategories.find((s) => s.id === selectedSubCategoryId);
+                    if (
+                      selected &&
+                      (selected.bannerImage || selected.bannerVideo || selected.youtubeUrl)
+                    ) {
+                      return {
+                        bannerImage: selected.bannerImage,
+                        bannerVideo: selected.bannerVideo,
+                        youtubeUrl: selected.youtubeUrl,
+                        title: selected.name,
+                      };
+                    }
+                    return null;
+                  })()
+                }
+              />
+
+              {/* Legacy slot banners (Banner Details sheet) */}
               <CategoryBanner banners={banners} onBannerPress={handleBannerPress} />
 
               {loading ? (

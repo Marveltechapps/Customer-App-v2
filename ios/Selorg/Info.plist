@@ -27,7 +27,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>com.selorg.mobile</string>
+          <string>com.selorg.com</string>
         </array>
       </dict>
     </array>
@@ -43,7 +43,7 @@
       <string>credpay</string>
     </array>
     <key>LSMinimumSystemVersion</key>
-    <string>12.0</string>
+    <string>15.1</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>NSAppTransportSecurity</key>
@@ -62,9 +62,11 @@
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>This app needs access to your location to show the route to your delivery address.</string>
     <key>RCTNewArchEnabled</key>
-    <true/>
+    <false/>
     <key>UIBackgroundModes</key>
-    <array/>
+    <array>
+      <string>remote-notification</string>
+    </array>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>

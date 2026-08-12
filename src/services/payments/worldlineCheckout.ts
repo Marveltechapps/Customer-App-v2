@@ -1,9 +1,19 @@
 import { Platform, NativeModules } from 'react-native';
-import WeiplCheckout from 'react-native-weipl-checkout';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { api } from '../api/client';
 import { endpoints } from '../api/endpoints';
 import { logger } from '@/utils/logger';
+
+/** Lazy-load so Expo Go / cold start never evaluates the native Weipl module at import time. */
+function getWeiplCheckout(): typeof import('react-native-weipl-checkout').default | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    return require('react-native-weipl-checkout').default;
+  } catch (error) {
+    logger.warn('react-native-weipl-checkout unavailable', error);
+    return null;
+  }
+}
 
 type PlatformKey = 'android' | 'ios';
 
@@ -164,7 +174,7 @@ export function normalizeWorldlineSessionPayloadForSdk(sessionPayload: any, hash
 }
 
 function resolveWorldlineSdk(): { open: (payload: any, onSuccess: (res: any) => void, onError: (err: any) => void) => void } | null {
-  const moduleRef: any = WeiplCheckout as any;
+  const moduleRef: any = getWeiplCheckout() as any;
   
   // Check if native module is available
   // The JS wrapper in react-native-weipl-checkout calls NativeModules.WeiplCheckout.open()

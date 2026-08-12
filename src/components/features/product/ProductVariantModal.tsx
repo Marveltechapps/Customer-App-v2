@@ -8,7 +8,7 @@ import {
   Image,
   ImageSourcePropType,
   Animated,
-  Dimensions,
+  useWindowDimensions,
   Easing,
   ScrollView,
   ImageURISource,
@@ -26,6 +26,7 @@ import MinusIcon from '../../icons/MinusIcon';
 import { useCart } from '@/contexts/CartContext';
 import { logger } from '@/utils/logger';
 import { addOrIncrementCartLine } from '@/utils/cartActions';
+import { useResponsive, scaleFont } from '@/utils/responsive';
 
 export interface ProductVariant {
   id: string;
@@ -78,7 +79,8 @@ export default function ProductVariantModal({
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
-  const screenHeight = Dimensions.get('window').height;
+  const { height: screenHeight } = useWindowDimensions();
+  const { isTablet: isTabletWidth } = useResponsive();
   const slideAnim = React.useRef(new Animated.Value(screenHeight)).current;
   const backdropOpacity = React.useRef(new Animated.Value(0)).current;
   /** Keep RN Modal mounted until exit animation finishes — avoids close snapping when parent sets `visible={false}`. */
@@ -217,7 +219,7 @@ export default function ProductVariantModal({
 
   // Open / close: use easing-based timing so close never "snaps".
   useEffect(() => {
-    const h = Dimensions.get('window').height;
+    const h = screenHeight;
     const ease = Easing.bezier(0.16, 1, 0.3, 1);
     const backdropTarget = 0.5;
     const openDurationMs = 360;
@@ -270,7 +272,7 @@ export default function ProductVariantModal({
         onAfterClose?.();
       }
     });
-  }, [visible, slideAnim, backdropOpacity]);
+  }, [visible, slideAnim, backdropOpacity, screenHeight]);
 
   const handleVariantSelect = (variantId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -382,6 +384,9 @@ export default function ProductVariantModal({
           style={[
             styles.modalContainer,
             {
+              maxHeight: screenHeight * 0.85,
+              maxWidth: isTabletWidth ? 480 : undefined,
+              alignSelf: isTabletWidth ? 'center' : 'flex-end',
               transform: [{ translateY: slideAnim }],
             },
           ]}
@@ -389,7 +394,7 @@ export default function ProductVariantModal({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerContent}>
-              <Text style={styles.productName}>{productName}</Text>
+              <Text style={[styles.productName, { fontSize: scaleFont(20, 17, 24) }]}>{productName}</Text>
               <Text style={styles.subtitle}>Select size & quantity</Text>
             </View>
             <TouchableOpacity
@@ -634,7 +639,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    maxHeight: Dimensions.get('window').height * 0.85,
     width: '100%',
     shadowColor: '#000',
     shadowOffset: {

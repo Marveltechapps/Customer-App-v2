@@ -24,11 +24,17 @@ import { getEnvConfigSafe } from '../config/env';
 import CmsRemoteImage from '../components/common/CmsRemoteImage';
 import { Theme } from '../constants/Theme';
 import { prewarmSettingsModule } from '../utils/prewarmSettingsModule';
+import { useResponsive } from '../utils/responsive';
+import { useUser } from '../contexts/UserContext';
+import { markSplashCompleted } from '../constants/appLaunch';
 
 const MAX_SECTIONS = 20;
 
 export default function HomeScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
+  const { isAuthenticated, isRestoring } = useUser();
+  const { width: screenWidth } = useResponsive();
+  const couponCardWidth = Math.min(312, screenWidth * 0.85);
   const { appConfig } = useAppConfig();
   const { getTotalItems } = useCart();
   const cartItemCount = getTotalItems();
@@ -65,13 +71,13 @@ export default function HomeScreen() {
       const res = await addressService.getAll();
       if (!res?.success || !Array.isArray(res.data) || res.data.length === 0) {
         setDefaultAddress(null);
-        await setLocation(null);
+        // Keep a locally selected delivery location (common for guests).
+        // Clearing here would wipe store assignment and product availability.
         return false;
       }
       const selected = pickDefaultAddress(res.data);
       if (!selected) {
         setDefaultAddress(null);
-        await setLocation(null);
         return false;
       }
       setDefaultAddress(selected);
@@ -86,8 +92,9 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (isRestoring) return;
       void syncDeliveryAddressFromServer();
-    }, [syncDeliveryAddressFromServer]),
+    }, [syncDeliveryAddressFromServer, isRestoring]),
   );
 
   useEffect(() => {
@@ -117,7 +124,7 @@ export default function HomeScreen() {
   const hasSavedDeliveryAddress = Boolean(defaultAddress?.line1?.trim());
   const formattedAddress = hasSavedDeliveryAddress
     ? formatAddressLines(defaultAddress)
-    : 'Add location';
+    : contextLocation?.address?.trim() || 'Add location';
   const deliveryDestinationLabel = hasSavedDeliveryAddress
     ? defaultAddress?.label || defaultAddress?.city || 'Home'
     : contextLocation?.city || contextLocation?.area || 'your area';
@@ -171,6 +178,14 @@ export default function HomeScreen() {
   );
 
   const handleProfilePress = () => {
+    if (!isAuthenticated) {
+      markSplashCompleted();
+      navigation.navigate('Login', {
+        fromSplash: 'settings',
+        returnTo: 'Settings',
+      });
+      return;
+    }
     navigation.navigate('Settings');
   };
 
@@ -288,13 +303,16 @@ export default function HomeScreen() {
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   pagingEnabled={false}
-                  snapToInterval={312 + 12} // width + gap
+                  snapToInterval={couponCardWidth + 12} // width + gap
                   decelerationRate="fast"
                   contentContainerStyle={styles.couponCarouselContent}
                   keyExtractor={(item) => item._id}
                   renderItem={({ item }) => (
                     <TouchableOpacity
-                      style={[styles.couponBannerCard, { borderColor: item.themeColor || '#2A7D4F' }]}
+                      style={[
+                        styles.couponBannerCard,
+                        { width: couponCardWidth, borderColor: item.themeColor || '#2A7D4F' },
+                      ]}
                       onPress={() => {
                         navigation.navigate('MainTabs', {
                           screen: 'Cart',
@@ -563,8 +581,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   couponBannerCard: {
-    width: 312,
-    height: 120,
+    aspectRatio: 312 / 120,
     borderRadius: 12,
     borderWidth: 1.5,
     overflow: 'hidden',

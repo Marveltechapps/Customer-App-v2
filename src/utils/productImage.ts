@@ -206,7 +206,7 @@ function resolveImageUrl(inputUrl: string): string | null {
   return null;
 }
 
-type ProductLikeImageInput = {
+export type ProductLikeImageInput = {
   images?: string[];
   imageUrl?: string;
   /** Preferred list/tile URL from bootstrap when optimized assets exist. */

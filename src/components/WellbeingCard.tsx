@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Image, TouchableOpacity, ImageSourcePropType } from 'react-native';
 import Text from './common/Text';
 import { logger } from '@/utils/logger';
+import { scaleFont } from '@/utils/responsive';
 
 export interface WellbeingProduct {
   id: string;
@@ -39,12 +40,13 @@ export default function WellbeingCard({ product, onPress }: WellbeingCardProps) 
 
 const styles = StyleSheet.create({
   container: {
-    width: 155,
+    flex: 1,
+    maxWidth: 180,
     gap: 8,
   },
   imageContainer: {
-    width: 155,
-    height: 172,
+    width: '100%',
+    aspectRatio: 155 / 172,
     borderRadius: 0,
     overflow: 'hidden',
   },
@@ -59,17 +61,17 @@ const styles = StyleSheet.create({
   },
   productName: {
     fontFamily: 'Inter',
-    fontSize: 16,
+    fontSize: scaleFont(16, 14, 19),
     fontWeight: '500',
-    lineHeight: 19.36,
+    lineHeight: scaleFont(19.36, 17, 23),
     color: '#000000',
     textAlign: 'center',
   },
   productDescription: {
     fontFamily: 'Inter',
-    fontSize: 12,
+    fontSize: scaleFont(12, 11, 14),
     fontWeight: '400',
-    lineHeight: 14.52,
+    lineHeight: scaleFont(14.52, 13, 17),
     color: '#000000',
     textAlign: 'center',
   },

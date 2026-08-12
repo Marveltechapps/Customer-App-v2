@@ -12,7 +12,10 @@ export interface UserProfile {
   name: string;
   email?: string;
   phoneNumber: string;
+  phoneVerified?: boolean;
+  phoneVerifiedAt?: string;
   avatar?: string;
+  avatarUrl?: string;
   dateOfBirth?: string;
   gender?: 'male' | 'female' | 'other';
 }
@@ -30,7 +33,14 @@ export interface UpdateProfileRequest {
   dateOfBirth?: string;
   gender?: UserProfile['gender'];
   avatar?: string;
+  avatarUrl?: string;
   savedCheckoutContact?: SavedCheckoutContact;
+}
+
+export interface LinkPhoneOtpResult {
+  sessionId: string;
+  channel?: string;
+  resendCooldownSeconds?: number;
 }
 
 export interface PaymentMethod {
@@ -67,6 +77,43 @@ export const updateProfile = async (data: UpdateProfileRequest): Promise<ApiResp
 };
 
 /**
+ * Upload avatar as base64 (no data: prefix). Returns updated public profile.
+ */
+export const uploadAvatar = async (base64Image: string): Promise<ApiResponse<UserProfile>> => {
+  const image = base64Image.includes(',')
+    ? base64Image.split(',').pop() || base64Image
+    : base64Image;
+  return api.post<UserProfile>(endpoints.user.avatar, { image });
+};
+
+/** Send OTP to link a phone number on the authenticated profile. */
+export const sendLinkPhoneOtp = async (
+  phoneNumber: string,
+  channel: 'sms' | 'whatsapp' = 'sms'
+): Promise<ApiResponse<LinkPhoneOtpResult> & LinkPhoneOtpResult> => {
+  const digits = String(phoneNumber || '').replace(/\D/g, '').slice(-10);
+  return api.post(endpoints.user.sendLinkPhoneOtp, {
+    phoneNumber: digits,
+    channel,
+    preferredChannel: channel,
+  });
+};
+
+/** Verify OTP and permanently link phone to the authenticated profile. */
+export const verifyLinkPhoneOtp = async (
+  sessionId: string,
+  otp: string
+): Promise<ApiResponse<UserProfile>> => {
+  return api.post(endpoints.user.verifyLinkPhoneOtp, { sessionId, otp });
+};
+
+export const resendLinkPhoneOtp = async (
+  sessionId: string
+): Promise<ApiResponse<{ resendCooldownSeconds?: number; channel?: string }>> => {
+  return api.post(endpoints.user.resendLinkPhoneOtp, { sessionId });
+};
+
+/**
  * Get payment methods
  */
 export const getPaymentMethods = async (): Promise<ApiResponse<PaymentMethod[]>> => {
@@ -93,4 +140,3 @@ export const removePaymentMethod = async (id: string): Promise<ApiResponse<void>
 export const setDefaultPaymentMethod = async (id: string): Promise<ApiResponse<PaymentMethod>> => {
   return api.post<PaymentMethod>(endpoints.payments.setDefault(id));
 };
-

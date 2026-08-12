@@ -1,4 +1,4 @@
-package com.selorg.mobile
+package com.selorg.com
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

@@ -123,6 +123,7 @@ export function buildCartItemPayload(
     originalPrice: number;
     discount: string;
     gstRate?: number;
+    maxOrderLimit?: number | null;
   },
 ): Omit<CartItem, 'quantity'> {
   const productId = resolveVariantRowProductId(row, cardProductId);
@@ -137,6 +138,7 @@ export function buildCartItemPayload(
     originalPrice: row.originalPrice ?? product.originalPrice,
     discount: product.discount,
     gstRate: typeof product.gstRate === 'number' ? product.gstRate : 0,
+    maxOrderLimit: product.maxOrderLimit ?? null,
   };
 }
 

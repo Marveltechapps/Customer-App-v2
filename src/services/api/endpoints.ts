@@ -25,6 +25,10 @@ export const endpoints = {
     profile: `${P}/user/profile`,
     updateProfile: `${P}/user/profile`,
     changePassword: `${P}/user/change-password`,
+    avatar: `${P}/user/profile/avatar`,
+    sendLinkPhoneOtp: `${P}/user/phone/send-otp`,
+    verifyLinkPhoneOtp: `${P}/user/phone/verify-otp`,
+    resendLinkPhoneOtp: `${P}/user/phone/resend-otp`,
   },
 
   // Product endpoints
@@ -45,6 +49,8 @@ export const endpoints = {
   cart: {
     get: `${P}/cart`,
     addItem: `${P}/cart/items`,
+    /** Idempotent guest → auth cart merge (exactly once per mergeKey). */
+    merge: `${P}/cart/merge`,
     /** Update quantity by cart line id; body may include productId/variantId for server fallback. */
     updateItem: (itemId: string) => `${P}/cart/items/${itemId}`,
     /** PUT same path as add — updates by productId + variantId when line id is unknown. */
@@ -60,6 +66,7 @@ export const endpoints = {
     detail: (id: string) => `${P}/orders/${id}`,
     create: `${P}/orders`,
     cancel: (id: string) => `${P}/orders/${id}/cancel`,
+    canCancel: (id: string) => `${P}/orders/${id}/can-cancel`,
     rate: (id: string) => `${P}/orders/${id}/rate`,
     status: (id: string) => `${P}/orders/${id}/status`,
     invoice: (id: string) => `${P}/orders/${id}/invoice`,
@@ -86,7 +93,11 @@ export const endpoints = {
       session: `${P}/payments/worldline/session`,
       complete: `${P}/payments/worldline/complete`,
       status: `${P}/payments/worldline/status`,
+      abort: `${P}/payments/worldline/abort`,
     },
+    retryStatus: (orderId: string) => `${P}/payments/${orderId}/retry-status`,
+    retry: (orderId: string) => `${P}/payments/${orderId}/retry`,
+    recordFailure: `${P}/payments/record-failure`,
   },
 
   // Coupon endpoints
@@ -107,10 +118,15 @@ export const endpoints = {
   // Notification endpoints
   notifications: {
     list: `${P}/notifications`,
+    unreadCount: `${P}/notifications/unread-count`,
     markRead: (id: string) => `${P}/notifications/${id}/read`,
+    markUnread: (id: string) => `${P}/notifications/${id}/unread`,
     markAllRead: `${P}/notifications/read-all`,
+    delete: (id: string) => `${P}/notifications/${id}`,
+    preferences: `${P}/notifications/preferences`,
     registerToken: `${P}/notifications/register-token`,
     removeToken: `${P}/notifications/remove-token`,
+    removeAllTokens: `${P}/notifications/remove-all-tokens`,
   },
 
   // Onboarding endpoints
@@ -126,6 +142,7 @@ export const endpoints = {
     balance: `${P}/wallet/balance`,
     transactions: `${P}/wallet/transactions`,
     debit: `${P}/wallet/debit`,
+    topUpSession: `${P}/wallet/top-up/session`,
   },
 
   // Support chat endpoints

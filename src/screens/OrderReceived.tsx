@@ -26,14 +26,22 @@ import type {
 } from '../types/navigation';
 import SuccessBackground from '../assets/images/success-background.svg';
 import SuccessIconContainer from '../assets/images/success-icon-container.svg';
+import { useResponsive, scaleFont } from '../utils/responsive';
 
 type OrderReceivedRouteProp = RouteProp<OrdersStackParamList, 'OrderReceived'>;
+
+/** Design reference: 350×163 success background. */
+const DESIGN_CARD_WIDTH = 350;
+const DESIGN_BG_HEIGHT = 163;
 
 const OrderReceived: React.FC = () => {
   const navigation = useNavigation<OrdersStackNavigationProp>();
   const rootNavigation = useNavigation<RootStackNavigationProp>();
   const route = useRoute<OrderReceivedRouteProp>();
   const orderId = route.params?.orderId;
+  const { width: screenWidth } = useResponsive();
+  const cardWidth = Math.min(screenWidth - 40, DESIGN_CARD_WIDTH);
+  const bgHeight = (cardWidth / DESIGN_CARD_WIDTH) * DESIGN_BG_HEIGHT;
 
   const handleRateOrder = () => {
     if (orderId) {
@@ -52,9 +60,9 @@ const OrderReceived: React.FC = () => {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.content}>
-        <View style={styles.cardContainer}>
-          <View style={styles.backgroundContainer}>
-            <SuccessBackground width={350} height={163} />
+        <View style={[styles.cardContainer, { width: cardWidth }]}>
+          <View style={[styles.backgroundContainer, { height: bgHeight }]}>
+            <SuccessBackground width="100%" height="100%" preserveAspectRatio="xMidYMid slice" />
           </View>
 
           <View style={styles.innerContent}>
@@ -63,7 +71,7 @@ const OrderReceived: React.FC = () => {
             </View>
 
             <View style={styles.messageContainer}>
-              <Text style={styles.title}>Order Delivered!</Text>
+              <Text style={[styles.title, { fontSize: scaleFont(22, 19, 26) }]}>Order Delivered!</Text>
               <Text style={styles.subtitle}>
                 Your order has been successfully delivered. We hope you enjoy your items!
               </Text>
@@ -105,7 +113,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   cardContainer: {
-    width: 350,
+    maxWidth: 350,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     overflow: 'hidden',
@@ -116,7 +124,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 163,
   },
   innerContent: {
     alignItems: 'center',

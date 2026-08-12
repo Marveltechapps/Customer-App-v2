@@ -119,9 +119,10 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 if (storedRoute && navigationRef.current) {
                   (navigationRef.current.navigate as any)(storedRoute.name, storedRoute.params);
                 } else if (navigationRef.current) {
+                  // Never force Splash on reconnect — that replayed the splash loop.
                   navigationRef.current.reset({
                     index: 0,
-                    routes: [{ name: 'Splash', params: { next: 'Login' } }],
+                    routes: [{ name: 'MainTabs' }],
                   });
                 }
                 return null;

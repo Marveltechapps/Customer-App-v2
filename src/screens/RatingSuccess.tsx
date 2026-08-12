@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SuccessBackground from '../assets/images/success-background.svg';
 import SuccessIconContainer from '../assets/images/success-icon-container.svg';
+import { useResponsive, scaleFont } from '../utils/responsive';
 
 interface RatingSuccessProps {
   visible: boolean;
@@ -17,11 +18,21 @@ interface RatingSuccessProps {
   onDone?: () => void;
 }
 
+/** Design reference: 350×163 background pattern, content padding-top at 82px. */
+const DESIGN_CARD_WIDTH = 350;
+const DESIGN_BG_HEIGHT = 163;
+const DESIGN_CONTENT_TOP = 82;
+
 const RatingSuccess: React.FC<RatingSuccessProps> = ({
   visible,
   onClose,
   onDone,
 }) => {
+  const { width: screenWidth } = useResponsive();
+  const cardWidth = Math.min(screenWidth - 40, DESIGN_CARD_WIDTH);
+  const bgHeight = (cardWidth / DESIGN_CARD_WIDTH) * DESIGN_BG_HEIGHT;
+  const contentTop = (cardWidth / DESIGN_CARD_WIDTH) * DESIGN_CONTENT_TOP;
+
   const handleDone = () => {
     if (onDone) {
       onDone();
@@ -39,19 +50,19 @@ const RatingSuccess: React.FC<RatingSuccessProps> = ({
     >
       <View style={styles.modalOverlay}>
         <StatusBar barStyle="light-content" />
-        <View style={styles.modalContainer}>
-          <View style={styles.backgroundContainer}>
-            <SuccessBackground width={350} height={163} />
+        <View style={[styles.modalContainer, { width: cardWidth }]}>
+          <View style={[styles.backgroundContainer, { height: bgHeight }]}>
+            <SuccessBackground width="100%" height="100%" preserveAspectRatio="xMidYMid slice" />
           </View>
           
-          <View style={styles.contentContainer}>
+          <View style={[styles.contentContainer, { paddingTop: contentTop }]}>
             <View style={styles.iconContainer}>
               <SuccessIconContainer width={122} height={122} />
             </View>
             
             <View style={styles.messageContainer}>
               <View style={styles.titleContainer}>
-                <Text style={styles.title}>Successful !</Text>
+                <Text style={[styles.title, { fontSize: scaleFont(20, 18, 24) }]}>Successful !</Text>
               </View>
               <Text style={styles.subtitle}>Thanks for your feedback</Text>
             </View>
@@ -78,8 +89,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContainer: {
-    width: 350,
-    height: 368,
+    maxWidth: 350,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     overflow: 'hidden',
@@ -90,15 +100,12 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 163,
   },
   contentContainer: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 82,
-    paddingBottom: 20,
-    paddingHorizontal: 62,
+    paddingBottom: 24,
+    paddingHorizontal: 40,
     gap: 16,
   },
   iconContainer: {
@@ -131,7 +138,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   doneButton: {
-    width: 201,
+    width: '100%',
+    maxWidth: 201,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderWidth: 1,

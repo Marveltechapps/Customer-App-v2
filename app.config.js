@@ -8,6 +8,7 @@
 const path = require('path');
 const fs = require('fs');
 const withPaynimoActivity = require('./plugins/withPaynimoActivity.js');
+const withFirebaseMessagingManifestFix = require('./plugins/withFirebaseMessagingManifestFix.js');
 
 const envPath = path.resolve(__dirname, '.env');
 
@@ -104,7 +105,200 @@ if (!GOOGLE_MAPS_API_KEY) {
   // Continue with build but maps features will not work
 }
 
+/**
+ * Firebase client config (JS SDK) — env only, no hardcoded secrets.
+ * Prefer EXPO_PUBLIC_* (inlined for Metro) with FIREBASE_* aliases for EAS secrets.
+ * Set the same names as EAS Secrets for development / preview / production builds.
+ */
+function envFirst(...keys) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+const FIREBASE_API_KEY = envFirst('EXPO_PUBLIC_FIREBASE_API_KEY', 'FIREBASE_API_KEY');
+const FIREBASE_AUTH_DOMAIN = envFirst('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN', 'FIREBASE_AUTH_DOMAIN');
+const FIREBASE_PROJECT_ID = envFirst('EXPO_PUBLIC_FIREBASE_PROJECT_ID', 'FIREBASE_PROJECT_ID');
+const FIREBASE_STORAGE_BUCKET = envFirst('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET', 'FIREBASE_STORAGE_BUCKET');
+const FIREBASE_MESSAGING_SENDER_ID = envFirst(
+  'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
+  'FIREBASE_MESSAGING_SENDER_ID'
+);
+const FIREBASE_APP_ID = envFirst('EXPO_PUBLIC_FIREBASE_APP_ID', 'FIREBASE_APP_ID');
+const FIREBASE_APP_ID_ANDROID = envFirst(
+  'EXPO_PUBLIC_FIREBASE_APP_ID_ANDROID',
+  'FIREBASE_APP_ID_ANDROID'
+);
+const FIREBASE_APP_ID_IOS = envFirst('EXPO_PUBLIC_FIREBASE_APP_ID_IOS', 'FIREBASE_APP_ID_IOS');
+const FIREBASE_MEASUREMENT_ID = envFirst(
+  'EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID',
+  'FIREBASE_MEASUREMENT_ID'
+);
+
+// Mirror into EXPO_PUBLIC_* so Metro can inline them when present only as FIREBASE_*.
+const firebasePublicMirror = {
+  EXPO_PUBLIC_FIREBASE_API_KEY: FIREBASE_API_KEY,
+  EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: FIREBASE_AUTH_DOMAIN,
+  EXPO_PUBLIC_FIREBASE_PROJECT_ID: FIREBASE_PROJECT_ID,
+  EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: FIREBASE_STORAGE_BUCKET,
+  EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: FIREBASE_MESSAGING_SENDER_ID,
+  EXPO_PUBLIC_FIREBASE_APP_ID: FIREBASE_APP_ID,
+  EXPO_PUBLIC_FIREBASE_APP_ID_ANDROID: FIREBASE_APP_ID_ANDROID,
+  EXPO_PUBLIC_FIREBASE_APP_ID_IOS: FIREBASE_APP_ID_IOS,
+  EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID: FIREBASE_MEASUREMENT_ID,
+};
+Object.entries(firebasePublicMirror).forEach(([key, value]) => {
+  if (value && !process.env[key]) process.env[key] = value;
+});
+
+const firebaseClientConfig = {
+  apiKey: FIREBASE_API_KEY,
+  authDomain: FIREBASE_AUTH_DOMAIN,
+  projectId: FIREBASE_PROJECT_ID,
+  storageBucket: FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: FIREBASE_MESSAGING_SENDER_ID,
+  appId: FIREBASE_APP_ID,
+  appIdAndroid: FIREBASE_APP_ID_ANDROID,
+  appIdIos: FIREBASE_APP_ID_IOS,
+  measurementId: FIREBASE_MEASUREMENT_ID,
+};
+
+const firebaseRequiredKeys = [
+  'apiKey',
+  'authDomain',
+  'projectId',
+  'storageBucket',
+  'messagingSenderId',
+];
+const firebaseMissing = firebaseRequiredKeys.filter((k) => !firebaseClientConfig[k]);
+const hasPlatformAppId =
+  Boolean(firebaseClientConfig.appId) ||
+  Boolean(firebaseClientConfig.appIdAndroid) ||
+  Boolean(firebaseClientConfig.appIdIos);
+if (firebaseMissing.length > 0 || !hasPlatformAppId) {
+  console.warn(
+    '⚠️  Firebase client env incomplete. Set FIREBASE_* / EXPO_PUBLIC_FIREBASE_* (see .env.example). JS Firebase will stay disabled until configured.'
+  );
+}
+
+const ANDROID_PACKAGE = 'com.selorg.com';
+const IOS_BUNDLE_ID = 'com.selorg.com';
+
+/** Validate Android google-services.json for EAS / prebuild FCM. */
+function resolveAndroidGoogleServicesFile() {
+  const relativePath = './google-services.json';
+  const absolutePath = path.resolve(__dirname, 'google-services.json');
+  if (!fs.existsSync(absolutePath)) {
+    console.warn(
+      '⚠️  google-services.json missing at Customer-App-v2 root. Android FCM / native Firebase will not work in release builds.'
+    );
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
+    const clients = Array.isArray(parsed.client) ? parsed.client : [];
+    const packageNames = clients
+      .map((c) => c?.client_info?.android_client_info?.package_name)
+      .filter(Boolean);
+    if (!packageNames.includes(ANDROID_PACKAGE)) {
+      console.warn(
+        `⚠️  google-services.json package_name mismatch. Expected "${ANDROID_PACKAGE}", found: ${
+          packageNames.join(', ') || '(none)'
+        }`
+      );
+    } else {
+      console.log(`✅ google-services.json OK for Android package ${ANDROID_PACKAGE}`);
+    }
+  } catch (error) {
+    console.warn('⚠️  Failed to parse google-services.json:', error?.message || error);
+  }
+  return relativePath;
+}
+
+/** iOS native Firebase / FCM config (GoogleService-Info.plist at app root). */
+function resolveIosGoogleServicesFile() {
+  const relativePath = './GoogleService-Info.plist';
+  const absolutePath = path.resolve(__dirname, 'GoogleService-Info.plist');
+  if (!fs.existsSync(absolutePath)) {
+    console.warn(
+      '⚠️  GoogleService-Info.plist not found. iOS native FCM requires this file + ios.googleServicesFile.'
+    );
+    return undefined;
+  }
+  try {
+    const contents = fs.readFileSync(absolutePath, 'utf8');
+    const plistValue = (key) => {
+      const match = contents.match(
+        new RegExp(`<key>${key}<\\/key>\\s*<string>([^<]+)<\\/string>`)
+      );
+      return match?.[1]?.trim() || '';
+    };
+    const plistBundleId = plistValue('BUNDLE_ID');
+    const googleAppId = plistValue('GOOGLE_APP_ID');
+    const gcmSenderId = plistValue('GCM_SENDER_ID');
+    const projectId = plistValue('PROJECT_ID');
+    const gcmEnabled =
+      /<key>IS_GCM_ENABLED<\/key>\s*<true\s*\/>/i.test(contents) ||
+      /<key>IS_GCM_ENABLED<\/key>\s*<true>\s*<\/true>/i.test(contents);
+
+    if (plistBundleId && plistBundleId !== IOS_BUNDLE_ID) {
+      console.warn(
+        `⚠️  GoogleService-Info.plist BUNDLE_ID mismatch. Expected "${IOS_BUNDLE_ID}", found: "${plistBundleId}"`
+      );
+    } else if (plistBundleId) {
+      console.log(`✅ GoogleService-Info.plist OK for iOS bundle ${IOS_BUNDLE_ID}`);
+    } else {
+      console.warn('⚠️  GoogleService-Info.plist found but BUNDLE_ID could not be parsed.');
+    }
+
+    if (!googleAppId || !googleAppId.includes(':ios:')) {
+      console.warn('⚠️  GoogleService-Info.plist GOOGLE_APP_ID missing or not an iOS app id.');
+    }
+    if (!gcmSenderId) {
+      console.warn('⚠️  GoogleService-Info.plist GCM_SENDER_ID missing (required for FCM).');
+    }
+    if (!projectId) {
+      console.warn('⚠️  GoogleService-Info.plist PROJECT_ID missing.');
+    }
+    if (!gcmEnabled) {
+      console.warn('⚠️  GoogleService-Info.plist IS_GCM_ENABLED is not true.');
+    }
+  } catch (error) {
+    console.warn('⚠️  Failed to parse GoogleService-Info.plist:', error?.message || error);
+  }
+  return relativePath;
+}
+
+const androidGoogleServicesFile = resolveAndroidGoogleServicesFile();
+const iosGoogleServicesFile = resolveIosGoogleServicesFile();
+
+/**
+ * aps-environment must be `production` for TestFlight / App Store / preview release builds.
+ * Dev-client only uses `development` (EAS_BUILD_PROFILE=development or APS_ENVIRONMENT override).
+ */
+const easBuildProfile = String(process.env.EAS_BUILD_PROFILE || '').trim();
+const apsEnvironmentOverride = String(process.env.APS_ENVIRONMENT || '').trim().toLowerCase();
+const apsEnvironment =
+  apsEnvironmentOverride === 'development' || apsEnvironmentOverride === 'production'
+    ? apsEnvironmentOverride
+    : easBuildProfile === 'development'
+      ? 'development'
+      : 'production';
+
+/** Apple Developer Team ID — EAS signing + APNs Auth Key Team ID in Firebase Console. */
+const APPLE_TEAM_ID = String(process.env.APPLE_TEAM_ID || '387A8ZCB5C').trim();
+
+/** APNs Auth Key ID uploaded in Firebase Console → Cloud Messaging (Apple). */
+const APNS_KEY_ID = String(process.env.APNS_KEY_ID || '2HVKPR57YW').trim();
+
+console.log(
+  `✅ iOS aps-environment=${apsEnvironment} (profile=${easBuildProfile || 'local'}, team=${APPLE_TEAM_ID}, apnsKey=${APNS_KEY_ID})`
+);
+
 // Root assets for native icons and splash branding.
+// Expo Go / native splash require PNG (SVG is invalid for icon/splash).
 const appIcon = "./assets/selorg-logo.png";
 const splashImage = "./assets/splash.png";
 
@@ -131,7 +325,12 @@ module.exports = {
     },
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.selorg.mobile",
+      bundleIdentifier: IOS_BUNDLE_ID,
+      appleTeamId: APPLE_TEAM_ID,
+      ...(iosGoogleServicesFile ? { googleServicesFile: iosGoogleServicesFile } : {}),
+      entitlements: {
+        'aps-environment': apsEnvironment,
+      },
       config: {
         ...(GOOGLE_MAPS_API_KEY && { googleMapsApiKey: GOOGLE_MAPS_API_KEY })
       },
@@ -145,6 +344,7 @@ module.exports = {
           NSAllowsLocalNetworking: true
         },
         LSApplicationQueriesSchemes: ['phonepe', 'gpay', 'paytm', 'credpay'],
+        UIBackgroundModes: ['remote-notification'],
       }
     },
     android: {
@@ -152,7 +352,8 @@ module.exports = {
         foregroundImage: appIcon,
         backgroundColor: "#ffffff"
       },
-      package: "com.selorg.mobile",
+      package: ANDROID_PACKAGE,
+      ...(androidGoogleServicesFile ? { googleServicesFile: androidGoogleServicesFile } : {}),
       config: {
         ...(GOOGLE_MAPS_API_KEY && {
           googleMaps: {
@@ -162,24 +363,35 @@ module.exports = {
       },
       permissions: [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
       ]
     },
     web: {
       favicon: appIcon
     },
     plugins: [
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
       [
         "expo-build-properties",
         {
+          // Expo SDK 54 / RN 0.81 floor is iOS 15.1 (15.0 is rejected by expo-build-properties).
           ios: {
-            newArchEnabled: false
+            deploymentTarget: "15.1",
+            newArchEnabled: false,
+            // Required by firebase-ios-sdk / React Native Firebase on Expo 54+.
+            useFrameworks: "static",
+            forceStaticLinking: ["RNFBApp", "RNFBMessaging"],
           },
           android: {
-            newArchEnabled: false,
+            newArchEnabled: true,
             minSdkVersion: 24,
-            // Match android/gradle.properties — avoids sideload failures on devices that reject target API 36.
-            targetSdkVersion: 35,
+            compileSdkVersion: 36,
+            targetSdkVersion: 36,
+            buildToolsVersion: "36.0.0",
             usesCleartextTraffic: true
           }
         }
@@ -187,8 +399,10 @@ module.exports = {
       [
         "expo-notifications",
         {
-          icon: "./assets/selorg-logo.png",
-          color: "#034703"
+          icon: appIcon,
+          color: "#034703",
+          // Adds UIBackgroundModes → remote-notification for iOS background/killed delivery.
+          enableBackgroundRemoteNotifications: true,
         }
       ],
       [
@@ -205,7 +419,9 @@ module.exports = {
         }
       ],
       "expo-secure-store",
-      withPaynimoActivity
+      withPaynimoActivity,
+      // Must run after expo-notifications so tools:replace is applied to the color meta-data it adds.
+      withFirebaseMessagingManifestFix
     ],
     extra: {
       eas: {
@@ -229,7 +445,21 @@ module.exports = {
       paymentApiBaseUrl: resolvedPaymentApiBaseUrl,
       /** `gateway`: delay → Worldline SDK → POST /api/payment/callback. `simulate`: delay → POST minimal body (mock servers only). */
       paymentStandaloneMode: (process.env.PAYMENT_STANDALONE_MODE || "gateway").trim().toLowerCase(),
-      ...(GOOGLE_MAPS_API_KEY && { googleMapsApiKey: GOOGLE_MAPS_API_KEY })
+      ...(GOOGLE_MAPS_API_KEY && { googleMapsApiKey: GOOGLE_MAPS_API_KEY }),
+      /** JS Firebase SDK config (from env). Consumed by src/config/firebase.ts */
+      firebase: firebaseClientConfig,
+      /** Native FCM file linkage status for runtime diagnostics (no secrets). */
+      firebaseNative: {
+        androidGoogleServicesFile: androidGoogleServicesFile || null,
+        iosGoogleServicesFile: iosGoogleServicesFile || null,
+      },
+      /** APNs Auth Key metadata (no private key). Must match Firebase Console upload. */
+      apns: {
+        keyId: APNS_KEY_ID,
+        teamId: APPLE_TEAM_ID,
+        bundleId: IOS_BUNDLE_ID,
+        apsEnvironment,
+      },
     }
   }
 };

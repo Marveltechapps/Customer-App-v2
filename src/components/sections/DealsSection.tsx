@@ -13,6 +13,7 @@ import {
 } from '@/utils/productVariants';
 import { isVariantRowInCart } from '@/utils/productCardCart';
 import { Theme } from '@/constants/Theme';
+import { useResponsive } from '@/utils/responsive';
 
 interface DealsSectionProps {
   title?: string;
@@ -30,6 +31,7 @@ export default function DealsSection({
   fetchProducts,
   highPriorityImageCount = 0,
 }: DealsSectionProps) {
+  const { productCardWidth } = useResponsive();
   const { updateQuantity, removeFromCart, cartItems, getLineQuantity } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -200,6 +202,7 @@ export default function DealsSection({
           >
             <ProductCard
               product={product}
+              width={productCardWidth}
               variants={rowsForProduct(product)}
               onQuantityPress={handleQuantityPress}
               onAddPress={handleAddPress}

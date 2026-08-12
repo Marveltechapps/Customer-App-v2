@@ -101,10 +101,72 @@ const MapAddressPin: React.FC = () => {
     }
   }, []);
 
+  /** Resolve a searched address to coordinates without requesting OS location permission. */
+  const geocodeSearchLocation = useCallback(async (title: string, address: string) => {
+    setLoading(true);
+    try {
+      const query = address?.trim() || title?.trim();
+      if (!query) {
+        setLoading(false);
+        return;
+      }
+      const results = await Location.geocodeAsync(query);
+      if (!results.length) {
+        logger.warn('Geocode returned no results', { query });
+        setLoading(false);
+        return;
+      }
+      const { latitude, longitude } = results[0];
+      let area = title || 'Selected Location';
+      let city = '';
+      let state = '';
+      let pincode = '';
+      let resolvedAddress = address || query;
+
+      try {
+        const geocoded = await Location.reverseGeocodeAsync({ latitude, longitude });
+        if (geocoded.length > 0) {
+          const place = geocoded[0];
+          const parts: string[] = [];
+          if (place.name) parts.push(place.name);
+          if (place.street) parts.push(place.street);
+          if (place.district) parts.push(place.district);
+          if (place.city) parts.push(place.city);
+          if (place.region) parts.push(place.region);
+          if (parts.length) resolvedAddress = parts.join(', ');
+          area = place.district || place.subregion || place.name || area;
+          city = place.city || place.region || '';
+          state = place.region || '';
+          pincode = place.postalCode || '';
+        }
+      } catch {
+        // keep search address text
+      }
+
+      setCurrentLocation({
+        latitude,
+        longitude,
+        title: title || area,
+        address: resolvedAddress,
+        city,
+        state,
+        pincode,
+        area,
+      });
+    } catch (error) {
+      logger.error('Error geocoding search location', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (routeLocation?.useGPS || !routeLocation?.latitude) {
+    // OS permission only when the user explicitly chose "Use Current Location".
+    if (routeLocation?.useGPS) {
       fetchGPSLocation();
-    } else if (routeLocation?.latitude && routeLocation?.longitude) {
+      return;
+    }
+    if (routeLocation?.latitude != null && routeLocation?.longitude != null) {
       setCurrentLocation({
         latitude: routeLocation.latitude,
         longitude: routeLocation.longitude,
@@ -116,10 +178,18 @@ const MapAddressPin: React.FC = () => {
         area: '',
       });
       setLoading(false);
-    } else {
-      fetchGPSLocation();
+      return;
     }
-  }, [routeLocation, fetchGPSLocation]);
+    if (routeLocation?.address || routeLocation?.title) {
+      void geocodeSearchLocation(
+        routeLocation.title || 'Selected Location',
+        routeLocation.address || '',
+      );
+      return;
+    }
+    // No GPS request on open — wait for an explicit action.
+    setLoading(false);
+  }, [routeLocation, fetchGPSLocation, geocodeSearchLocation]);
 
   const handleRegionChange = useCallback(async (region: Region) => {
     try {
@@ -200,10 +270,20 @@ const MapAddressPin: React.FC = () => {
           <Header title={headerTitle} />
         </View>
         <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>Could not get location. Please try again.</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchGPSLocation} activeOpacity={0.8}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
+          <Text style={styles.errorText}>
+            {routeLocation?.useGPS
+              ? 'Could not get your current location. Please try again or search for an address.'
+              : 'Could not place this location on the map. Try Current Location or another search.'}
+          </Text>
+          {routeLocation?.useGPS ? (
+            <TouchableOpacity style={styles.retryButton} onPress={fetchGPSLocation} activeOpacity={0.8}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.retryButton} onPress={fetchGPSLocation} activeOpacity={0.8}>
+              <Text style={styles.retryButtonText}>Use Current Location</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     );

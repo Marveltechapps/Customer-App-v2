@@ -243,6 +243,12 @@ const EnterCompleteAddress: React.FC = () => {
     if (lastSavedAddressRef.current) {
       notifyAddressesChanged({ type: 'upsert', address: lastSavedAddressRef.current });
     }
+    // Leave the Addresses stack so Home / MainTabs picks up the new delivery location.
+    const parent = navigation.getParent();
+    if (parent?.canGoBack()) {
+      parent.goBack();
+      return;
+    }
     if (navigation.canGoBack()) {
       navigation.goBack();
       return;

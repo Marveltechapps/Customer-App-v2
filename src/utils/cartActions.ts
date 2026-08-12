@@ -1,8 +1,8 @@
 import type { CartItem } from '../contexts/CartContext';
 import { normalizeVariantId } from './cartLineIdentity';
-import { MAX_CART_QTY_PER_ITEM } from './cartConstants';
+import { capCartQuantity, canIncreaseCartQty } from './cartConstants';
 
-export { MAX_CART_QTY_PER_ITEM } from './cartConstants';
+export { capCartQuantity, canIncreaseCartQty, resolveMaxOrderLimit, maxOrderLimitMessage } from './cartConstants';
 
 type AddToCartFn = (item: Omit<CartItem, 'quantity'>) => void;
 type UpdateQuantityFn = (productId: string, variantId: string, quantity: number) => void;
@@ -10,6 +10,7 @@ type GetLineQuantityFn = (productId: string, variantId: string) => number;
 
 /**
  * Single fullstack-safe path: add new line (qty 1) or increment existing — never both.
+ * Caps by Master Sheet MaxOrderLimit when present (unlimited when null).
  */
 export function addOrIncrementCartLine(
   addToCart: AddToCartFn,
@@ -25,9 +26,12 @@ export function addOrIncrementCartLine(
     addToCart(payload);
     return;
   }
+  if (!canIncreaseCartQty(current, item.maxOrderLimit)) {
+    return;
+  }
   updateQuantity(
     productId,
     variantId,
-    Math.min(MAX_CART_QTY_PER_ITEM, current + 1),
+    capCartQuantity(current + 1, item.maxOrderLimit),
   );
 }

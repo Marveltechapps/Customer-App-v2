@@ -609,22 +609,36 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
     };
   }, []);
 
-  // Handle coupon applied from Coupons screen
-  // This works for both stack navigation (Checkout screen) and tab navigation (Cart tab)
+  // Handle coupon applied from Coupons screen (already validated there when discount > 0).
   useFocusEffect(
     useCallback(() => {
-      const params = route.params as { appliedCoupon?: { code: string; discount: number } } | undefined;
-      if (params?.appliedCoupon) {
-        setAppliedCoupon(params.appliedCoupon);
-        // Clear params after applying to prevent re-applying on subsequent focuses
-        // Only clear if we can set params (works for both stack and tab navigation)
-        try {
-          navigation.setParams({ appliedCoupon: undefined } as any);
-        } catch (error) {
-          // If setParams fails (e.g., in tab navigator), that's okay
-          // The params will be cleared on next navigation anyway
-        }
+      const params = route.params as {
+        appliedCoupon?: {
+          code: string;
+          discount: number;
+          displayName?: string;
+          isCashback?: boolean;
+          cashbackValue?: number;
+        };
+      } | undefined;
+      const incoming = params?.appliedCoupon;
+      if (!incoming?.code) return;
+
+      try {
+        navigation.setParams({ appliedCoupon: undefined } as any);
+      } catch {
+        /* tab navigator may not support setParams */
       }
+
+      setAppliedCoupon({
+        code: incoming.code,
+        discount: Number(incoming.discount || 0),
+        displayName: incoming.displayName,
+        isCashback: incoming.isCashback,
+        cashbackValue: incoming.cashbackValue,
+      });
+      setCouponCode('');
+      // Cart pricing refresh follows via pricingContext.couponCode effect.
     }, [route.params, navigation])
   );
 
@@ -1387,7 +1401,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
                 {/* Optional: Add an icon or image on the right if needed, similar to tip section */}
               </View>
               <View style={styles.deliveryInstructionsButtons}>
-                <Animated.View style={{ transform: [{ scale: instructionButtonScales[0] }] }}>
+                <Animated.View style={{ flex: 1, transform: [{ scale: instructionButtonScales[0] }] }}>
                   <TouchableOpacity
                     style={[
                       styles.deliveryInstructionButton,
@@ -1420,7 +1434,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
                     <Text style={styles.deliveryInstructionButtonText}>{deliveryInstructions[0] ?? 'No Contact Delivery'}</Text>
                   </TouchableOpacity>
                 </Animated.View>
-                <Animated.View style={{ transform: [{ scale: instructionButtonScales[1] }] }}>
+                <Animated.View style={{ flex: 1, transform: [{ scale: instructionButtonScales[1] }] }}>
                   <TouchableOpacity
                     style={[
                       styles.deliveryInstructionButton,
@@ -1451,7 +1465,7 @@ const Checkout: React.FC<CheckoutScreenProps> = ({
                     <Text style={styles.deliveryInstructionButtonText}>{deliveryInstructions[1] ?? "Don't ring the bell"}</Text>
                   </TouchableOpacity>
                 </Animated.View>
-                <Animated.View style={{ transform: [{ scale: instructionButtonScales[2] }] }}>
+                <Animated.View style={{ flex: 1, transform: [{ scale: instructionButtonScales[2] }] }}>
                   <TouchableOpacity
                     style={[
                       styles.deliveryInstructionButton,
@@ -1849,13 +1863,15 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   emptyCartImageContainer: {
+    width: '100%',
     padding: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyCartImage: {
-    width: 224,
-    height: 224,
+    width: '100%',
+    maxWidth: 224,
+    aspectRatio: 1,
     opacity: 0.9,
   },
   emptyCartTitle: {
@@ -1872,10 +1888,12 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: '#6B6B6B',
     textAlign: 'center',
-    width: 325,
+    width: '100%',
+    maxWidth: 325,
   },
   emptyCartWarningCard: {
-    width: 325,
+    width: '100%',
+    maxWidth: 325,
     padding: 16,
     borderRadius: 8,
     borderWidth: 2,
@@ -1984,6 +2002,7 @@ const styles = StyleSheet.create({
   },
   tipButtonsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
   },
@@ -2086,7 +2105,9 @@ const styles = StyleSheet.create({
     gap: 11,
   },
   deliveryInstructionButton: {
-    width: 100.67,
+    flex: 1,
+    maxWidth: 130,
+    minWidth: 88,
     height: 104,
     borderRadius: 8,
     padding: 12,
@@ -2382,7 +2403,8 @@ const styles = StyleSheet.create({
   customTipModal: {
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
-    width: 349,
+    width: '100%',
+    maxWidth: 349,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,

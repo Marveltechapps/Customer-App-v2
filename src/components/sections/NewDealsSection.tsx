@@ -12,6 +12,7 @@ import {
   fetchModalVariantsForProduct,
 } from '@/utils/productVariants';
 import { isVariantRowInCart } from '@/utils/productCardCart';
+import { useResponsive } from '@/utils/responsive';
 
 interface NewDealsSectionProps {
   title?: string;
@@ -26,6 +27,7 @@ export default function NewDealsSection({
   onAddPress,
   fetchProducts,
 }: NewDealsSectionProps) {
+  const { productCardWidth } = useResponsive();
   const { updateQuantity, removeFromCart, cartItems, getLineQuantity } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -190,6 +192,7 @@ export default function NewDealsSection({
           >
             <ProductCard
               product={product}
+              width={productCardWidth}
               variants={rowsForProduct(product)}
               onQuantityPress={handleQuantityPress}
               onAddPress={handleAddPress}

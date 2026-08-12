@@ -10,6 +10,7 @@ import SearchSuggestionItem from '../components/features/search/SearchSuggestion
 import { logger } from '@/utils/logger';
 import * as productService from '../services/products/productService';
 import { getProductImageSource } from '../utils/productImage';
+import { useResponsive } from '@/utils/responsive';
 
 interface SearchItem {
   id: string;
@@ -28,9 +29,11 @@ export default function SearchScreen({
   onItemPress 
 }: SearchScreenProps) {
   const navigation = useNavigation<RootStackNavigationProp>();
+  const { isTablet, scaleFont: rFont } = useResponsive();
   const [searchText, setSearchText] = useState('');
   const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [focusRefreshNonce, setFocusRefreshNonce] = useState(0);
 
   useRefreshOnFocus(() => {
@@ -43,11 +46,13 @@ export default function SearchScreen({
     const query = searchText.trim();
     if (query.length === 0) {
       setSearchResults([]);
+      setSearchError(null);
       setLoading(false);
       return;
     }
     const performSearch = async () => {
       setLoading(true);
+      setSearchError(null);
       try {
         if (fetchSearchData) {
           const results = await fetchSearchData(searchText);
@@ -76,6 +81,7 @@ export default function SearchScreen({
       } catch (error) {
         logger.error('Error fetching search data', error);
         setSearchResults([]);
+        setSearchError('Search failed. Tap to retry.');
       } finally {
         setLoading(false);
       }
@@ -113,7 +119,7 @@ export default function SearchScreen({
           showsVerticalScrollIndicator={false}
         >
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, isTablet && styles.headerTablet]}>
             {/* Search Container */}
             <View style={styles.searchContainer}>
               {/* Back Button */}
@@ -128,7 +134,7 @@ export default function SearchScreen({
               {/* Text Input */}
               <View style={styles.textInputContainer}>
                 <TextInput
-                  style={styles.searchInput}
+                  style={[styles.searchInput, { fontSize: rFont(14, 13, 17) }]}
                   placeholder="Search products..."
                   placeholderTextColor="#828282"
                   value={searchText}
@@ -159,12 +165,12 @@ export default function SearchScreen({
               /* Empty State Text Container */
               <View style={styles.emptyStateContainer}>
                 <View style={styles.textContainer}>
-                  <Text style={styles.emptyStateTitle}>
+                  <Text style={[styles.emptyStateTitle, { fontSize: rFont(14, 13, 17) }]}>
                     Start typing to search for products
                   </Text>
                 </View>
                 <View style={styles.subtitleContainer}>
-                  <Text style={styles.emptyStateSubtitle}>
+                  <Text style={[styles.emptyStateSubtitle, { fontSize: rFont(12, 11, 15) }]}>
                     Search by name, category, or keywords
                   </Text>
                 </View>
@@ -176,6 +182,15 @@ export default function SearchScreen({
                   <View style={styles.loadingContainer}>
                     <Text style={styles.loadingText}>Searching...</Text>
                   </View>
+                ) : searchError ? (
+                  <TouchableOpacity
+                    style={styles.noResultsContainer}
+                    onPress={() => setFocusRefreshNonce((n) => n + 1)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.errorText}>{searchError}</Text>
+                    <Text style={styles.retryHint}>Tap to retry</Text>
+                  </TouchableOpacity>
                 ) : searchResults.length > 0 ? (
                   searchResults.map((item) => (
                     <SearchSuggestionItem
@@ -221,6 +236,10 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     gap: 12,
     alignItems: 'center',
+  },
+  headerTablet: {
+    maxWidth: 720,
+    alignSelf: 'center',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -307,6 +326,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '400',
     color: '#212121',
+  },
+  errorText: {
+    fontFamily: 'Inter',
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#ED0004',
+    textAlign: 'center',
+  },
+  retryHint: {
+    fontFamily: 'Inter',
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#034703',
+    marginTop: 8,
+    textAlign: 'center',
   },
   emptyStateContainer: {
     width: '100%',

@@ -1,3 +1,7 @@
+/**
+ * Notification tap / inbox open → navigate using shared resolver.
+ */
+
 import { useEffect, useRef } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -5,14 +9,26 @@ import {
   addNotificationResponseListener,
 } from '../services/notifications/notificationService';
 import Toast from 'react-native-toast-message';
+import { resolveNotificationNavigation } from '../utils/resolveNotificationNavigation';
+import type { RootStackNavigationProp } from '../types/navigation';
+
+function navigateToTarget(
+  navigation: RootStackNavigationProp,
+  target: NonNullable<ReturnType<typeof resolveNotificationNavigation>>
+) {
+  if (target.screen === 'Payment') {
+    navigation.navigate('Payment', target.params);
+    return;
+  }
+  navigation.navigate(target.screen as never);
+}
 
 export function useNotificationDeepLink() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootStackNavigationProp>();
   const responseListenerRef = useRef<{ remove: () => void } | null>(null);
   const receivedListenerRef = useRef<{ remove: () => void } | null>(null);
 
   useEffect(() => {
-    // Foreground notification: show toast
     receivedListenerRef.current = addNotificationReceivedListener((notification) => {
       const { title, body } = notification.request.content;
       if (title || body) {
@@ -26,22 +42,18 @@ export function useNotificationDeepLink() {
       }
     });
 
-    // Notification tap: deep link to relevant screen
     responseListenerRef.current = addNotificationResponseListener((response) => {
-      const data = response.notification.request.content.data;
+      const data = response.notification.request.content.data as
+        | Record<string, unknown>
+        | undefined;
       if (!data) return;
 
-      const { type, orderId } = data as { type?: string; orderId?: string };
-
-      if (type === 'order_status' && orderId) {
-        navigation.navigate('OrderStatusStack', { screen: 'OrderStatusMain' });
-      } else if (type?.startsWith('REFUND') && orderId) {
-        navigation.navigate('RefundsStack', { screen: 'Refunds' });
-      } else if (type === 'SUPPORT_REPLY') {
-        navigation.navigate('CustomerSupportStack');
-      } else if (type === 'WALLET_CREDIT') {
-        navigation.navigate('Wallet');
-      }
+      const target = resolveNotificationNavigation({
+        type: typeof data.type === 'string' ? data.type : undefined,
+        orderId: typeof data.orderId === 'string' ? data.orderId : undefined,
+        ...data,
+      });
+      if (target) navigateToTarget(navigation, target);
     });
 
     return () => {

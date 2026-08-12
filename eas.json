@@ -1,0 +1,58 @@
+{
+  "cli": {
+    "version": ">= 18.5.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "MODE": "dev",
+        "APS_ENVIRONMENT": "development",
+        "APPLE_TEAM_ID": "387A8ZCB5C",
+        "APNS_KEY_ID": "2HVKPR57YW"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "MODE": "prod",
+        "APS_ENVIRONMENT": "production",
+        "APPLE_TEAM_ID": "387A8ZCB5C",
+        "APNS_KEY_ID": "2HVKPR57YW"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "MODE": "prod",
+        "ENV": "production",
+        "API_BASE_URL": "https://api.selorg.com/api/v1/customer",
+        "PAYMENT_API_BASE_URL": "https://api.selorg.com",
+        "PAYMENT_STANDALONE_MODE": "gateway",
+        "APS_ENVIRONMENT": "production",
+        "APPLE_TEAM_ID": "387A8ZCB5C",
+        "APNS_KEY_ID": "2HVKPR57YW"
+      }
+    },
+    "production-apk": {
+      "autoIncrement": true,
+      "env": {
+        "MODE": "prod",
+        "APS_ENVIRONMENT": "production",
+        "APPLE_TEAM_ID": "387A8ZCB5C",
+        "APNS_KEY_ID": "2HVKPR57YW"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

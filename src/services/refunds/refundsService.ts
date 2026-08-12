@@ -76,8 +76,14 @@ export async function fetchRefundDetails(refundId: string): Promise<RefundDetail
   return res.data;
 }
 
-export async function createRefundRequest(payload: RefundRequestPayload): Promise<RefundItem | null> {
-  const res = await api.post<{ success: boolean; data?: RefundItem }>(endpoints.refunds.request, payload);
-  if (!res.success || !res.data) return null;
+export async function createRefundRequest(payload: RefundRequestPayload): Promise<RefundItem> {
+  const res = await api.post<RefundItem>(endpoints.refunds.request, payload);
+  if (!res.success || !res.data) {
+    const msg =
+      (res as { error?: string; message?: string }).error ||
+      (res as { message?: string }).message ||
+      'Failed to submit return request';
+    throw new Error(typeof msg === 'string' ? msg : 'Failed to submit return request');
+  }
   return res.data;
 }

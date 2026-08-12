@@ -52,6 +52,12 @@ const REFRESH_TOKEN_KEY = 'refresh_token';
 const USER_DATA_KEY = 'user_data';
 const ONBOARDING_COMPLETED_KEY = 'onboarding_completed';
 const ONBOARDING_COMPLETED_AT_KEY = 'onboarding_completed_at';
+const FCM_DEVICE_TOKEN_KEY = 'fcm_device_token';
+const FCM_DEVICE_TOKEN_SYNCED_KEY = 'fcm_device_token_synced';
+/** Local guest cart JSON (persists across app restarts until login merge or explicit clear). */
+const GUEST_CART_KEY = '@selorg_guest_cart';
+/** Idempotency key for POST /cart/merge — stable until merge succeeds. */
+const GUEST_CART_MERGE_KEY = '@selorg_guest_cart_merge_key';
 
 /**
  * Transient pending-payment marker written during checkout. Tied to the active
@@ -200,6 +206,95 @@ export const clearToken = async (): Promise<boolean> => {
   }
 };
 
+async function readSecureOrFallback(key: string): Promise<string | null> {
+  try {
+    if (secureStoreAvailable && SecureStore) {
+      return await SecureStore.getItemAsync(key);
+    }
+    if (asyncStorageAvailable && AsyncStorage) {
+      return await AsyncStorage.getItem(key);
+    }
+    return await getItemFallback(key);
+  } catch (error) {
+    logger.error(`Error reading storage key ${key}`, error);
+    return await getItemFallback(key);
+  }
+}
+
+async function writeSecureOrFallback(key: string, value: string): Promise<boolean> {
+  try {
+    if (secureStoreAvailable && SecureStore) {
+      await SecureStore.setItemAsync(key, value);
+      return true;
+    }
+    if (asyncStorageAvailable && AsyncStorage) {
+      await AsyncStorage.setItem(key, value);
+      return true;
+    }
+    await setItemFallback(key, value);
+    return true;
+  } catch (error) {
+    logger.error(`Error writing storage key ${key}`, error);
+    try {
+      await setItemFallback(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+async function deleteSecureOrFallback(key: string): Promise<boolean> {
+  try {
+    if (secureStoreAvailable && SecureStore) {
+      await SecureStore.deleteItemAsync(key);
+      return true;
+    }
+    if (asyncStorageAvailable && AsyncStorage) {
+      await AsyncStorage.removeItem(key);
+      return true;
+    }
+    await removeItemFallback(key);
+    return true;
+  } catch (error) {
+    logger.error(`Error deleting storage key ${key}`, error);
+    try {
+      await removeItemFallback(key);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+/** Native FCM / device push token (SecureStore when available). */
+export const getFcmToken = async (): Promise<string | null> => {
+  return readSecureOrFallback(FCM_DEVICE_TOKEN_KEY);
+};
+
+export const saveFcmToken = async (token: string): Promise<boolean> => {
+  return writeSecureOrFallback(FCM_DEVICE_TOKEN_KEY, token);
+};
+
+export const clearFcmToken = async (): Promise<boolean> => {
+  const clearedToken = await deleteSecureOrFallback(FCM_DEVICE_TOKEN_KEY);
+  const clearedSync = await deleteSecureOrFallback(FCM_DEVICE_TOKEN_SYNCED_KEY);
+  return clearedToken && clearedSync;
+};
+
+/** Last FCM token successfully sent to the backend (for refresh / re-sync). */
+export const getFcmTokenLastSynced = async (): Promise<string | null> => {
+  return readSecureOrFallback(FCM_DEVICE_TOKEN_SYNCED_KEY);
+};
+
+export const saveFcmTokenLastSynced = async (token: string): Promise<boolean> => {
+  return writeSecureOrFallback(FCM_DEVICE_TOKEN_SYNCED_KEY, token);
+};
+
+export const clearFcmTokenLastSynced = async (): Promise<boolean> => {
+  return deleteSecureOrFallback(FCM_DEVICE_TOKEN_SYNCED_KEY);
+};
+
 /**
  * Save user data to storage
  */
@@ -315,6 +410,70 @@ export const getOnboardingCompletedAt = async (): Promise<string | null> => {
   } catch (error) {
     logger.error('Error getting onboarding completion timestamp', error);
     return await getItemFallback(ONBOARDING_COMPLETED_AT_KEY);
+  }
+};
+
+/**
+ * Guest cart persistence (local-only until login merge).
+ */
+export const getGuestCart = async (): Promise<string | null> => {
+  try {
+    if (asyncStorageAvailable && AsyncStorage) {
+      return await AsyncStorage.getItem(GUEST_CART_KEY);
+    }
+    return await getItemFallback(GUEST_CART_KEY);
+  } catch (error) {
+    logger.error('Error getting guest cart', error);
+    return null;
+  }
+};
+
+export const saveGuestCart = async (cartJson: string): Promise<void> => {
+  try {
+    if (asyncStorageAvailable && AsyncStorage) {
+      await AsyncStorage.setItem(GUEST_CART_KEY, cartJson);
+      return;
+    }
+    await setItemFallback(GUEST_CART_KEY, cartJson);
+  } catch (error) {
+    logger.error('Error saving guest cart', error);
+  }
+};
+
+export const clearGuestCart = async (): Promise<void> => {
+  try {
+    if (asyncStorageAvailable && AsyncStorage) {
+      await AsyncStorage.removeItem(GUEST_CART_KEY);
+      await AsyncStorage.removeItem(GUEST_CART_MERGE_KEY);
+      return;
+    }
+    await removeItemFallback(GUEST_CART_KEY);
+    await removeItemFallback(GUEST_CART_MERGE_KEY);
+  } catch (error) {
+    logger.error('Error clearing guest cart', error);
+  }
+};
+
+/** Stable merge idempotency key for the current guest cart session. */
+export const getOrCreateGuestCartMergeKey = async (): Promise<string> => {
+  try {
+    let existing: string | null = null;
+    if (asyncStorageAvailable && AsyncStorage) {
+      existing = await AsyncStorage.getItem(GUEST_CART_MERGE_KEY);
+    } else {
+      existing = await getItemFallback(GUEST_CART_MERGE_KEY);
+    }
+    if (existing && existing.trim()) return existing;
+    const key = `guest-merge-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    if (asyncStorageAvailable && AsyncStorage) {
+      await AsyncStorage.setItem(GUEST_CART_MERGE_KEY, key);
+    } else {
+      await setItemFallback(GUEST_CART_MERGE_KEY, key);
+    }
+    return key;
+  } catch (error) {
+    logger.error('Error getting guest cart merge key', error);
+    return `guest-merge-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }
 };
 

@@ -7,6 +7,7 @@ import ShopFilledIcon from '../icons/ShopFilledIcon';
 import ShopOutlinedIcon from '../icons/ShopOutlinedIcon';
 import CartFilledIcon from '../icons/CartFilledIcon';
 import CartOutlinedIcon from '../icons/CartOutlinedIcon';
+import { useResponsive } from '@/utils/responsive';
 
 interface BottomNavigationBarProps {
   activeTab?: 'home' | 'shop' | 'cart';
@@ -23,9 +24,15 @@ export default function BottomNavigationBar({
   onCartPress,
   onCenterPress,
 }: BottomNavigationBarProps) {
+  const { scale: rScale, scaleFont: rFont } = useResponsive();
+
+  const barHeight = Math.min(Math.max(rScale(60), 56), 76);
+  const iconSize = Math.min(Math.max(rScale(24), 22), 30);
+  const labelFontSize = rFont(10, 9, 13);
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <View style={styles.container}>
+      <View style={[styles.container, { height: barHeight }]}>
         {/* Home Tab */}
         <TouchableOpacity
           style={styles.homeTab}
@@ -34,13 +41,14 @@ export default function BottomNavigationBar({
         >
           <View style={styles.tabContent}>
             {activeTab === 'home' ? (
-              <HomeFilledIcon color="#034703" size={24} />
+              <HomeFilledIcon color="#034703" size={iconSize} />
             ) : (
-              <HomeOutlinedIcon color="#0C0C0C" size={24} />
+              <HomeOutlinedIcon color="#0C0C0C" size={iconSize} />
             )}
             <Text
               style={[
                 styles.tabText,
+                { fontSize: labelFontSize },
                 activeTab === 'home' ? styles.activeTabText : styles.inactiveTabText,
               ]}
             >
@@ -57,13 +65,14 @@ export default function BottomNavigationBar({
         >
           <View style={styles.shopTabContent}>
             {activeTab === 'shop' ? (
-              <ShopFilledIcon color="#034703" size={24} />
+              <ShopFilledIcon color="#034703" size={iconSize} />
             ) : (
-              <ShopOutlinedIcon color="#0C0C0C" size={24} />
+              <ShopOutlinedIcon color="#0C0C0C" size={iconSize} />
             )}
             <Text
               style={[
                 styles.tabText,
+                { fontSize: labelFontSize },
                 activeTab === 'shop' ? styles.activeTabText : styles.inactiveTabText,
               ]}
               numberOfLines={1}
@@ -81,13 +90,14 @@ export default function BottomNavigationBar({
         >
           <View style={styles.cartTabContent}>
             {activeTab === 'cart' ? (
-              <CartFilledIcon color="#034703" size={24} />
+              <CartFilledIcon color="#034703" size={iconSize} />
             ) : (
-              <CartOutlinedIcon color="#0C0C0C" size={24} />
+              <CartOutlinedIcon color="#0C0C0C" size={iconSize} />
             )}
             <Text
               style={[
                 styles.tabText,
+                { fontSize: labelFontSize },
                 activeTab === 'cart' ? styles.activeTabText : styles.inactiveTabText,
               ]}
             >

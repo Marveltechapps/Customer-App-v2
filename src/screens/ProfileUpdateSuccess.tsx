@@ -10,16 +10,27 @@ import {
 import SuccessIconContainer from '../assets/images/success-icon-container.svg';
 import SuccessBackground from '../assets/images/success-background.svg';
 import { logger } from '@/utils/logger';
+import { useResponsive, scaleFont } from '../utils/responsive';
 
 interface ProfileUpdateSuccessProps {
   visible: boolean;
   onDone?: () => void;
 }
 
+/** Design reference: 350×163 background pattern, icon top offset at 82px. */
+const DESIGN_CARD_WIDTH = 350;
+const DESIGN_BG_HEIGHT = 163;
+const DESIGN_CONTENT_TOP = 82;
+
 const ProfileUpdateSuccess: React.FC<ProfileUpdateSuccessProps> = ({
   visible,
   onDone,
 }) => {
+  const { width: screenWidth } = useResponsive();
+  const cardWidth = Math.min(screenWidth - 40, DESIGN_CARD_WIDTH);
+  const bgHeight = (cardWidth / DESIGN_CARD_WIDTH) * DESIGN_BG_HEIGHT;
+  const contentTop = (cardWidth / DESIGN_CARD_WIDTH) * DESIGN_CONTENT_TOP;
+
   const handleDone = () => {
     if (onDone) {
       onDone();
@@ -37,14 +48,14 @@ const ProfileUpdateSuccess: React.FC<ProfileUpdateSuccessProps> = ({
     >
       <StatusBar barStyle="dark-content" backgroundColor="rgba(0, 0, 0, 0.5)" />
       <View style={styles.overlay}>
-        <View style={styles.container}>
+        <View style={[styles.container, { width: cardWidth }]}>
           {/* Decorative Background Pattern */}
-          <View style={styles.backgroundPatternContainer}>
-            <SuccessBackground width={350} height={163} />
+          <View style={[styles.backgroundPatternContainer, { height: bgHeight }]}>
+            <SuccessBackground width="100%" height="100%" preserveAspectRatio="xMidYMid slice" />
           </View>
           
           {/* Content Section - Column layout, center aligned */}
-          <View style={styles.contentSection}>
+          <View style={[styles.contentSection, { paddingTop: contentTop }]}>
             {/* Icon Container - White circle background with centered tick icon */}
             <View style={styles.iconContainer}>
               <SuccessIconContainer width={122} height={122} />
@@ -58,7 +69,7 @@ const ProfileUpdateSuccess: React.FC<ProfileUpdateSuccessProps> = ({
                 <View style={styles.titleContainer}>
                   {/* Title - Row, center aligned */}
                   <View style={styles.titleWrapper}>
-                    <Text style={styles.title}>Successful !</Text>
+                    <Text style={[styles.title, { fontSize: scaleFont(20, 18, 24) }]}>Successful !</Text>
                   </View>
                 </View>
                 {/* Subtitle */}
@@ -95,27 +106,24 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   container: {
-    width: 350,
-    height: 368,
+    maxWidth: 350,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     overflow: 'hidden',
     position: 'relative',
+    paddingBottom: 24,
   },
   backgroundPatternContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
-    width: 350,
-    height: 163,
+    right: 0,
   },
   contentSection: {
-    position: 'absolute',
-    top: 82,
-    left: 62,
     flexDirection: 'column',
     alignItems: 'center',
-    width: 226, // 350 - (62 * 2) = 226
+    width: '100%',
+    paddingHorizontal: 24,
   },
   iconContainer: {
     width: 122,
@@ -162,7 +170,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   buttonContainer: {
-    width: 201,
+    width: '100%',
+    maxWidth: 201,
     flexDirection: 'column',
     justifyContent: 'center',
     alignItems: 'center',

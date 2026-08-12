@@ -8,6 +8,7 @@ import CmsRemoteImage from '../../common/CmsRemoteImage';
 import { useCart } from '@/contexts/CartContext';
 import ChevronRightIcon from '../../icons/ChevronRightIcon';
 import { getImageFitFromUrl, resolveCartLineImageUrl } from '@/utils/productImage';
+import { useResponsive } from '@/utils/responsive';
 
 interface FloatingCartBarProps {
   onPress?: () => void;
@@ -19,6 +20,7 @@ export default function FloatingCartBar({ onPress, hasBottomNav = false }: Float
   const navigation = useNavigation<RootStackNavigationProp>();
   const totalItems = getTotalItems();
   const insets = useSafeAreaInsets();
+  const { scale: rScale, scaleFont: rFont, width: screenWidth } = useResponsive();
 
   // Entrance animation
   const slideAnim = useRef(new Animated.Value(100)).current;
@@ -27,6 +29,17 @@ export default function FloatingCartBar({ onPress, hasBottomNav = false }: Float
   /** Tab screens (Home, etc.): sit closer to the bottom nav. Other screens: slightly more breathing room. */
   const bottomGap = hasBottomNav ? 2 : 10;
   const bottomPosition = insets.bottom + bottomGap;
+
+  // Responsive metrics — bar grows slightly on tablets but is soft-capped.
+  const thumbSize = rScale(48);
+  const overlap = -(thumbSize * 0.75);
+  const iconSize = rScale(40);
+  const containerPadding = rScale(4);
+  const containerGap = rScale(20);
+  const maxBarWidth = Math.min(rScale(242), screenWidth * 0.75);
+  const textWidth = rScale(81.11);
+  const viewCartFontSize = rFont(14, 12, 17);
+  const itemCountFontSize = rFont(14, 12, 17);
 
   // Entrance animation when cart has items
   useEffect(() => {
@@ -90,12 +103,12 @@ export default function FloatingCartBar({ onPress, hasBottomNav = false }: Float
       ]}
     >
       <TouchableOpacity
-        style={styles.container}
+        style={[styles.container, { padding: containerPadding, gap: containerGap, maxWidth: maxBarWidth }]}
         onPress={handlePress}
         activeOpacity={0.8}
       >
       {/* Product Images - Show latest 3 */}
-      <View style={styles.imagesContainer}>
+      <View style={[styles.imagesContainer, { gap: -thumbSize * 0.75 }]}>
         {latestItems.map((item, index) => {
           const imageUri = resolveCartLineImageUrl({
             productId: item.productId,
@@ -108,7 +121,8 @@ export default function FloatingCartBar({ onPress, hasBottomNav = false }: Float
               key={`${item.variantId}-${index}`}
               style={[
                 styles.imageWrapper,
-                index > 0 && styles.overlappingImage,
+                { width: thumbSize, height: thumbSize, borderRadius: thumbSize },
+                index > 0 && { marginLeft: overlap },
               ]}
             >
               <CmsRemoteImage
@@ -124,13 +138,13 @@ export default function FloatingCartBar({ onPress, hasBottomNav = false }: Float
       </View>
 
       {/* Text Container */}
-      <View style={styles.textContainer}>
-        <Text style={styles.viewCartText}>View Cart</Text>
-        <Text style={styles.itemCountText}>{totalItems} Item{totalItems !== 1 ? 's' : ''}</Text>
+      <View style={[styles.textContainer, { width: textWidth }]}>
+        <Text style={[styles.viewCartText, { fontSize: viewCartFontSize }]}>View Cart</Text>
+        <Text style={[styles.itemCountText, { fontSize: itemCountFontSize }]}>{totalItems} Item{totalItems !== 1 ? 's' : ''}</Text>
       </View>
 
       {/* Arrow/Icon Container */}
-      <View style={styles.iconContainer}>
+      <View style={[styles.iconContainer, { width: iconSize, height: iconSize, borderRadius: iconSize }]}>
         <ChevronRightIcon width={24} height={24} color="#FFFFFF" />
       </View>
     </TouchableOpacity>

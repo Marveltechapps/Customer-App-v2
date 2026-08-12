@@ -17,6 +17,8 @@ export interface CartItem {
   price: number;
   originalPrice?: number;
   image: string;
+  /** Master Sheet MaxOrderLimit — null = unlimited */
+  maxOrderLimit?: number | null;
 }
 
 export interface Cart {
@@ -103,5 +105,21 @@ export const removeFromCart = async (
  */
 export const clearCart = async (): Promise<ApiResponse<void>> => {
   return api.delete<void>(endpoints.cart.clear);
+};
+
+export interface GuestCartMergeItem {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+}
+
+/**
+ * Merge a guest (local) cart into the authenticated server cart exactly once per mergeKey.
+ */
+export const mergeGuestCart = async (data: {
+  mergeKey: string;
+  items: GuestCartMergeItem[];
+}): Promise<ApiResponse<Cart>> => {
+  return api.post<Cart>(endpoints.cart.merge, data);
 };
 

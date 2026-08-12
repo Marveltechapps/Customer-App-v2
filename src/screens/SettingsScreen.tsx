@@ -20,6 +20,12 @@ import {
   type SettingsMenuItemId,
 } from './settings/settingsMenuConfig';
 import SettingsLogoutSection from './settings/SettingsLogoutSection';
+import { useResponsive } from '@/utils/responsive';
+import {
+  formatUnreadBadge,
+  useUnreadNotificationCount,
+} from '../hooks/useUnreadNotificationCount';
+import { useRequireAuth } from '../hooks/useRequireAuth';
 
 interface SettingsProps {
   onLogout?: () => void;
@@ -29,14 +35,17 @@ interface SettingsMenuRowProps {
   item: SettingsMenuItemConfig;
   showIcon: boolean;
   onPress: (id: SettingsMenuItemId) => void;
+  badge?: string | null;
 }
 
 const SettingsMenuRow = React.memo(function SettingsMenuRow({
   item,
   showIcon,
   onPress,
+  badge,
 }: SettingsMenuRowProps) {
   const Icon = item.icon;
+  const { scaleFont: rFont } = useResponsive();
   return (
     <TouchableOpacity
       style={styles.settingsItem}
@@ -48,7 +57,14 @@ const SettingsMenuRow = React.memo(function SettingsMenuRow({
           <View style={styles.iconContainer}>
             {showIcon ? <Icon width={20} height={20} /> : null}
           </View>
-          <Text style={styles.itemText}>{item.title}</Text>
+          <Text style={[styles.itemText, { fontSize: rFont(14, 13, 17) }]} numberOfLines={1}>
+            {item.title}
+          </Text>
+          {badge ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{badge}</Text>
+            </View>
+          ) : null}
         </View>
         <ChevronRightIcon width={20} height={20} />
       </View>
@@ -58,10 +74,15 @@ const SettingsMenuRow = React.memo(function SettingsMenuRow({
 
 const SettingsScreen: React.FC<SettingsProps> = ({ onLogout }) => {
   const navigation = useNavigation<RootStackNavigationProp>();
+  const { isAllowed, isChecking } = useRequireAuth('Settings');
+  const { isTablet } = useResponsive();
   const mountAtRef = useRef(Date.now());
   const [showIcons, setShowIcons] = React.useState(false);
+  const { count: unreadCount } = useUnreadNotificationCount();
+  const notifBadge = formatUnreadBadge(unreadCount);
 
   useEffect(() => {
+    if (!isAllowed) return;
     logger.info('[settings-perf] mount', { screen: 'Settings' });
     const task = InteractionManager.runAfterInteractions(() => {
       setShowIcons(true);
@@ -70,7 +91,7 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onLogout }) => {
       });
     });
     return () => task.cancel();
-  }, []);
+  }, [isAllowed]);
 
   const handleItemPress = useCallback(
     (itemId: SettingsMenuItemId) => {
@@ -99,7 +120,7 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onLogout }) => {
           navigation.navigate('GeneralInfo');
           break;
         case 'notifications':
-          navigation.navigate('Notifications');
+          navigation.navigate('NotificationInbox');
           break;
         default:
           logger.info('Unknown item', { itemId });
@@ -112,6 +133,10 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onLogout }) => {
     [navigation],
   );
 
+  if (isChecking || !isAllowed) {
+    return <View style={styles.container} />;
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -122,13 +147,14 @@ const SettingsScreen: React.FC<SettingsProps> = ({ onLogout }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.itemsContainer}>
+        <View style={[styles.itemsContainer, isTablet && styles.itemsContainerTablet]}>
           {SETTINGS_MENU_ITEMS.map((item) => (
             <SettingsMenuRow
               key={item.id}
               item={item}
               showIcon={showIcons}
               onPress={handleItemPress}
+              badge={item.id === 'notifications' ? notifBadge : null}
             />
           ))}
         </View>
@@ -151,9 +177,14 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   itemsContainer: {
+    width: '100%',
     paddingHorizontal: 16,
     paddingTop: 20,
     gap: 12,
+  },
+  itemsContainerTablet: {
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   settingsItem: {
     backgroundColor: '#FFFFFF',
@@ -184,6 +215,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 20,
     color: '#4C4C4C',
+  },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#ED0004',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    marginLeft: 4,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
 

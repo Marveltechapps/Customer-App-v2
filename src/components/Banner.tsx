@@ -5,7 +5,6 @@ import {
   ImageSourcePropType,
   FlatList,
   TouchableOpacity,
-  useWindowDimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
@@ -15,6 +14,14 @@ import { logger } from '@/utils/logger';
 import { bannerIsTapEnabled } from '@/utils/bannerInteraction';
 import { handleRedirect } from '../utils/navigation/linkHandler';
 import BannerMedia from './BannerMedia';
+import {
+  resolveBannerContentFit,
+  resolveBannerSlideHeight,
+  getBannerAspectRatio,
+  scale,
+  Spacing,
+  useResponsive,
+} from '../utils/responsive';
 
 interface BannerProps {
   banners?: ImageSourcePropType[];
@@ -36,31 +43,33 @@ export default function Banner({
   isFirstBannerBlock = false,
 }: BannerProps) {
   const navigation = useNavigation<RootStackNavigationProp>();
-  // If single image is provided, convert to array; otherwise use banners from API (no fallback)
   const initialBanners = image ? [image] : (banners ?? []);
-  
+
   const [bannerImages, setBannerImages] = useState<ImageSourcePropType[]>(initialBanners);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(false);
   const flatListRef = useRef<FlatList<ImageSourcePropType>>(null);
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth } = useResponsive();
+  const horizontalPad = Spacing.lg(windowWidth);
+  const verticalPad = Spacing.xl(windowWidth);
+  const sectionGap = Spacing.md(windowWidth);
 
-  /** One slide = full width inside padded container (matches styles.container paddingHorizontal: 12). */
-  const slideWidth = useMemo(() => Math.max(0, windowWidth - 12 * 2), [windowWidth]);
+  /** One slide = full width inside padded container */
+  const slideWidth = useMemo(
+    () => Math.max(0, windowWidth - horizontalPad * 2),
+    [windowWidth, horizontalPad],
+  );
+  const dotSize = Math.max(6, scale(8, windowWidth));
+  const activeDotWidth = Math.max(12, scale(16, windowWidth));
 
-  // Sync when banners prop updates (e.g. from home payload)
   useEffect(() => {
     if (fetchBannerData) {
       const loadBanners = async () => {
-        setLoading(true);
         try {
           const data = await fetchBannerData();
           setBannerImages(data);
         } catch (error) {
           logger.error('Error fetching banner data', error);
           setBannerImages([]);
-        } finally {
-          setLoading(false);
         }
       };
       loadBanners();
@@ -85,7 +94,6 @@ export default function Banner({
 
   const handlePress = useCallback((index: number) => {
     const item = bannerImages[index] as any;
-    // If consumer provided onPress callback, prefer that
     if (onPress) {
       onPress(index);
       return;
@@ -105,7 +113,6 @@ export default function Banner({
         return;
       }
       const bid = item._id ?? item.id;
-      // CMS banner landing page (contentItems) — used when no explicit redirect configured.
       if (bid) {
         navigation.navigate('BannerDetail', {
           bannerId: String(bid),
@@ -127,9 +134,25 @@ export default function Banner({
     ({ item: banner, index }: { item: ImageSourcePropType; index: number }) => {
       const tap = bannerIsTapEnabled(banner);
       const b = banner as any;
-      const contentFit: 'fill' = 'fill';
+      const contentFit = resolveBannerContentFit(b?.contentFit);
       const preferredHeightRaw = Number(b?.dimensions?.preferredHeight);
-      const preferredHeight = Number.isFinite(preferredHeightRaw) && preferredHeightRaw > 0 ? preferredHeightRaw : undefined;
+      const preferredHeight =
+        Number.isFinite(preferredHeightRaw) && preferredHeightRaw > 0
+          ? preferredHeightRaw
+          : undefined;
+      const slideHeight = resolveBannerSlideHeight(slideWidth, {
+        variant: 'hero',
+        aspectRatio: b?.aspectRatio,
+        preferredHeight,
+        blockHeight: blockStyle?.height,
+        screenWidth: windowWidth,
+      });
+      const borderRadius =
+        blockStyle?.borderRadius != null
+          ? scale(blockStyle.borderRadius, windowWidth)
+          : scale(12, windowWidth);
+      const aspect =
+        slideWidth > 0 ? slideWidth / slideHeight : getBannerAspectRatio('hero', b?.aspectRatio);
       const inner = (
         <BannerMedia
           imageUrl={typeof b?.imageUrl === 'string' ? b.imageUrl : undefined}
@@ -145,13 +168,7 @@ export default function Banner({
       );
       const boxStyle = [
         styles.imageContainer,
-        { width: slideWidth },
-        (blockStyle?.height != null
-          ? { height: blockStyle.height }
-          : preferredHeight != null
-            ? { height: preferredHeight }
-            : null),
-        blockStyle?.borderRadius != null && { borderRadius: blockStyle.borderRadius },
+        { width: slideWidth, aspectRatio: aspect, borderRadius },
       ];
       if (!tap) {
         return <View style={boxStyle}>{inner}</View>;
@@ -162,7 +179,14 @@ export default function Banner({
         </TouchableOpacity>
       );
     },
-    [slideWidth, blockStyle?.height, blockStyle?.borderRadius, handlePress, isFirstBannerBlock]
+    [
+      slideWidth,
+      windowWidth,
+      blockStyle?.height,
+      blockStyle?.borderRadius,
+      handlePress,
+      isFirstBannerBlock,
+    ],
   );
 
   const getItemLayout = useCallback(
@@ -174,14 +198,21 @@ export default function Banner({
     [slideWidth]
   );
 
-  // Ensure banner images exist
   if (!bannerImages || bannerImages.length === 0) {
     return null;
   }
 
   return (
-    <View style={styles.container}>
-      {/* Banner Image Carousel */}
+    <View
+      style={[
+        styles.container,
+        {
+          paddingHorizontal: horizontalPad,
+          paddingVertical: verticalPad,
+          gap: sectionGap,
+        },
+      ]}
+    >
       <FlatList
         ref={flatListRef}
         data={bannerImages}
@@ -198,9 +229,9 @@ export default function Banner({
         style={[styles.list, { width: slideWidth }]}
         getItemLayout={getItemLayout}
         removeClippedSubviews={false}
+        extraData={slideWidth}
       />
 
-      {/* Dot Indicators */}
       {bannerImages.length > 1 && (
         <View style={styles.dotsContainer} accessibilityLabel="Banner page indicators">
           {bannerImages.map((_, index) => (
@@ -208,7 +239,9 @@ export default function Banner({
               key={index}
               style={[
                 styles.dot,
-                index === currentIndex ? styles.activeDot : styles.inactiveDot,
+                index === currentIndex
+                  ? [styles.activeDot, { width: activeDotWidth, height: dotSize }]
+                  : [styles.inactiveDot, { width: dotSize, height: dotSize }],
               ]}
             />
           ))}
@@ -220,18 +253,15 @@ export default function Banner({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 12, // Reduced padding for larger banner
-    paddingVertical: 20,
-    gap: 12,
+    width: '100%',
   },
   list: {
     flexGrow: 0,
     alignSelf: 'center',
   },
   imageContainer: {
-    height: 340, // default; can be overridden per banner by dimensions.preferredHeight
-    borderRadius: 12, // Slightly larger border radius
     overflow: 'hidden',
+    backgroundColor: '#EDEDED',
   },
   bannerImage: {
     width: '100%',
@@ -243,7 +273,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     width: '100%',
-    paddingHorizontal: 16,
     zIndex: 2,
     paddingVertical: 4,
   },
@@ -251,13 +280,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   activeDot: {
-    width: 16,
-    height: 8,
     backgroundColor: '#034703',
   },
   inactiveDot: {
-    width: 8,
-    height: 8,
     backgroundColor: '#BABABA',
   },
 });

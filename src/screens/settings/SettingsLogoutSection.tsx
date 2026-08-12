@@ -12,6 +12,15 @@ import type { RootStackNavigationProp } from '../../types/navigation';
 import { useUser } from '../../contexts/UserContext';
 import { tokenManager } from '../../services/api/tokenManager';
 import { logger } from '@/utils/logger';
+import { markSplashCompleted } from '../../constants/appLaunch';
+import {
+  removeAllPushTokens,
+  removePushToken,
+} from '../../services/notifications/inboxApi';
+import { getStoredFcmToken } from '../../services/notifications/fcmTokenService';
+import * as storage from '../../utils/storage';
+import { api } from '../../services/api/client';
+import { endpoints } from '../../services/api/endpoints';
 
 interface SettingsLogoutSectionProps {
   onLogout?: () => void;
@@ -34,7 +43,24 @@ const SettingsLogoutSection: React.FC<SettingsLogoutSectionProps> = ({ onLogout 
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     try {
+      // Best-effort: unregister push tokens while auth header is still valid.
+      try {
+        const fcm = await getStoredFcmToken();
+        if (fcm) await removePushToken(fcm);
+        await removeAllPushTokens().catch(() => undefined);
+      } catch (pushErr) {
+        logger.warn('Failed to unregister push tokens on logout', pushErr);
+      }
+
+      try {
+        await api.post(endpoints.auth.logout, {}).catch(() => undefined);
+      } catch {
+        /* ignore */
+      }
+
       await tokenManager.clearTokens();
+      await storage.clearFcmToken().catch(() => false);
+      await storage.clearFcmTokenLastSynced().catch(() => false);
     } catch (error) {
       logger.warn('Failed to fully clear session during logout', error);
     } finally {
@@ -42,9 +68,10 @@ const SettingsLogoutSection: React.FC<SettingsLogoutSectionProps> = ({ onLogout 
       setShowLogoutModal(false);
       setUser(null);
       onLogout?.();
+      markSplashCompleted();
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Splash', params: { next: 'Login' } }],
+        routes: [{ name: 'Login', params: { fromSplash: 'logout' } }],
       });
     }
   };

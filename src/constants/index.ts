@@ -13,3 +13,6 @@ export * from './routes';
 // Validation constants
 export * from './validation';
 
+// Onboarding content
+export * from './onboarding';
+

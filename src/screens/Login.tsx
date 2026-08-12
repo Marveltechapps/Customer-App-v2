@@ -26,6 +26,7 @@ import ConsentCheckbox from '@/components/auth/ConsentCheckbox';
 import CountryPickerModal from '@/components/auth/CountryPickerModal';
 import PolicyModal from '@/components/auth/PolicyModal';
 import Button from '@/components/common/Button';
+import SkipButton from '@/components/common/SkipButton';
 import { useAuthScreenTheme } from '@/hooks/useAuthScreenTheme';
 import {
   COUNTRY_LIST,
@@ -48,9 +49,11 @@ import {
 } from '@/services/auth/authService';
 import { tokenManager } from '@/services/api/tokenManager';
 import { savePendingOtpSession } from '@/utils/pendingOtpSession';
+import { saveOnboardingCompleted } from '@/utils/storage';
 import { isLoginAuthorizedFromSplash, navigateToLoginScreen } from '@/utils/navigationRef';
 import type { RootStackRouteProp } from '@/types/navigation';
 import { Colors } from '@/constants/Colors';
+import { completePostAuthNavigation } from '@/navigation/authNavigation';
 import { APP_LAUNCH_ID } from '@/constants/appLaunch';
 
 function parseLoginMode(value: unknown): LoginMode | null {
@@ -105,7 +108,9 @@ const Login: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         await tokenManager.initialize();
         if (!mounted) return;
         if (tokenManager.isTokenValid()) {
-          navigation.replace('MainTabs');
+          completePostAuthNavigation(navigation, {
+            returnTo: route.params?.returnTo,
+          });
           return;
         }
       } catch {
@@ -122,7 +127,7 @@ const Login: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     return () => {
       mounted = false;
     };
-  }, [navigation, route.params?.fromSplash]);
+  }, [navigation, route.params?.fromSplash, route.params?.returnTo]);
 
   useEffect(() => {
     dismissKeyboard();
@@ -298,6 +303,20 @@ const Login: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     if (fieldError) setFieldError(null);
   };
 
+  const handleSkipAsGuest = useCallback(async () => {
+    if (loading) return;
+    dismissKeyboard();
+    setLoading(true);
+    try {
+      // Ensure onboarding stays completed so Splash does not bounce guests back.
+      await saveOnboardingCompleted();
+      // Browse without auth — LocationContext already uses a "guest" storage bucket.
+      navigation.replace('MainTabs');
+    } finally {
+      setLoading(false);
+    }
+  }, [dismissKeyboard, loading, navigation]);
+
   const handleSendOTP = async () => {
     if (!consentChecked) return;
 
@@ -381,6 +400,7 @@ const Login: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         channel,
         phoneNumber: displayTarget,
         fromSplash: route.params?.fromSplash ?? APP_LAUNCH_ID,
+        returnTo: route.params?.returnTo,
       });
 
       if (onLoginSuccess && loginMode !== 'email') {
@@ -394,141 +414,150 @@ const Login: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  if (!readyToShow) return null;
+  if (!readyToShow) {
+    return <View style={[styles.container, { flex: 1, backgroundColor: Colors.background }]} />;
+  }
 
   const phoneLabel = loginMode === 'whatsapp' ? 'WhatsApp Number' : 'Mobile Number';
   const showPhoneInvalid = !!(phoneValidation?.showInvalid && fieldError === null && !phoneValidation.valid);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Pressable style={styles.container} onPress={dismissKeyboard} accessible={false}>
-        <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
-        <KeyboardAvoidingView
-          style={styles.container}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={0}
-        >
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            showsVerticalScrollIndicator={false}
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <Pressable style={styles.container} onPress={dismissKeyboard} accessible={false}>
+          <KeyboardAvoidingView
+            style={styles.container}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={0}
           >
-            <View style={styles.centeredBlock}>
-              <LoginWelcomeSection />
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.centeredBlock}>
+                <LoginWelcomeSection />
 
-              <View style={styles.cardShadow}>
-                <View style={styles.formCard}>
-                  <View style={styles.formBody}>
-                    <Text style={styles.methodLabel}>Choose login method</Text>
-                    <LoginMethodTabs value={loginMode} onChange={handleLoginModeChange} />
+                <View style={styles.cardShadow}>
+                  <View style={styles.formCard}>
+                    <View style={styles.formBody}>
+                      <Text style={styles.methodLabel}>Choose login method</Text>
+                      <LoginMethodTabs value={loginMode} onChange={handleLoginModeChange} />
 
-                    <View style={styles.fieldSection}>
-                {loginMode === 'email' ? (
-                  <View>
-                    <Text style={styles.fieldLabel}>Email Address</Text>
-                    <TextInput
-                      ref={emailInputRef}
-                      style={[
-                        styles.emailInput,
-                        (emailFocused || email.length > 0) && !fieldError && styles.inputFocus,
-                        fieldError && loginMode === 'email' && styles.inputError,
-                      ]}
-                      placeholder="you@example.com"
-                      placeholderTextColor={theme.colors.placeholder}
-                      value={email}
-                      onChangeText={handleEmailChange}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      returnKeyType="done"
-                      blurOnSubmit={false}
-                      autoComplete="off"
-                      textContentType="none"
-                      importantForAutofill="no"
-                      onFocus={() => setEmailFocused(true)}
-                      onBlur={() => setEmailFocused(false)}
-                      onSubmitEditing={() => {
-                        if (isCompleteEmail(email)) dismissKeyboard();
+                      <View style={styles.fieldSection}>
+                  {loginMode === 'email' ? (
+                    <View>
+                      <Text style={styles.fieldLabel}>Email Address</Text>
+                      <TextInput
+                        ref={emailInputRef}
+                        style={[
+                          styles.emailInput,
+                          (emailFocused || email.length > 0) && !fieldError && styles.inputFocus,
+                          fieldError && loginMode === 'email' && styles.inputError,
+                        ]}
+                        placeholder="you@example.com"
+                        placeholderTextColor={theme.colors.placeholder}
+                        value={email}
+                        onChangeText={handleEmailChange}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="done"
+                        blurOnSubmit={false}
+                        autoComplete="off"
+                        textContentType="none"
+                        importantForAutofill="no"
+                        onFocus={() => setEmailFocused(true)}
+                        onBlur={() => setEmailFocused(false)}
+                        onSubmitEditing={() => {
+                          if (isCompleteEmail(email)) dismissKeyboard();
+                        }}
+                      />
+                    </View>
+                  ) : (
+                    <PhoneInputRow
+                      country={country}
+                      value={formattedPhone}
+                      onChangeText={handlePhoneChange}
+                      onCountryPress={() => {
+                        dismissKeyboard();
+                        setCountryPickerVisible(true);
                       }}
+                      hasError={!!fieldError || showPhoneInvalid}
+                      isFocused={phoneFocused}
+                      hasInput={phoneDigits.length > 0}
+                      label={phoneLabel}
+                      inputRef={phoneInputRef}
+                      onFocus={() => setPhoneFocused(true)}
+                      onBlur={() => setPhoneFocused(false)}
+                      onSubmitEditing={dismissKeyboard}
                     />
-                  </View>
-                ) : (
-                  <PhoneInputRow
-                    country={country}
-                    value={formattedPhone}
-                    onChangeText={handlePhoneChange}
-                    onCountryPress={() => {
+                  )}
+
+                  {fieldError ? <Text style={styles.errorText}>{fieldError}</Text> : null}
+                  {showPhoneInvalid && phoneValidation?.message ? (
+                    <Text style={styles.errorText}>{phoneValidation.message}</Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.consentSection}>
+                  <ConsentCheckbox
+                    checked={consentChecked}
+                    onToggle={() => {
                       dismissKeyboard();
-                      setCountryPickerVisible(true);
+                      setConsentChecked((v) => !v);
                     }}
-                    hasError={!!fieldError || showPhoneInvalid}
-                    isFocused={phoneFocused}
-                    hasInput={phoneDigits.length > 0}
-                    label={phoneLabel}
-                    inputRef={phoneInputRef}
-                    onFocus={() => setPhoneFocused(true)}
-                    onBlur={() => setPhoneFocused(false)}
-                    onSubmitEditing={dismissKeyboard}
+                    onTermsPress={() => {
+                      dismissKeyboard();
+                      setPolicyModal('terms');
+                    }}
+                    onPrivacyPress={() => {
+                      dismissKeyboard();
+                      setPolicyModal('privacy');
+                    }}
                   />
-                )}
+                </View>
 
-                {fieldError ? <Text style={styles.errorText}>{fieldError}</Text> : null}
-                {showPhoneInvalid && phoneValidation?.message ? (
-                  <Text style={styles.errorText}>{phoneValidation.message}</Text>
-                ) : null}
-              </View>
-
-              <View style={styles.consentSection}>
-                <ConsentCheckbox
-                  checked={consentChecked}
-                  onToggle={() => {
-                    dismissKeyboard();
-                    setConsentChecked((v) => !v);
-                  }}
-                  onTermsPress={() => {
-                    dismissKeyboard();
-                    setPolicyModal('terms');
-                  }}
-                  onPrivacyPress={() => {
-                    dismissKeyboard();
-                    setPolicyModal('privacy');
-                  }}
-                />
-              </View>
-
-              <View style={styles.buttonContainer}>
-                <Button
-                  title="Send OTP"
-                  onPress={handleSendOTP}
-                  disabled={!canSendOtp}
-                  loading={loading}
-                  variant="primary"
-                  style={{ borderRadius: 12, minHeight: 52 }}
-                />
-              </View>
+                <View style={styles.buttonContainer}>
+                  <Button
+                    title="Send OTP"
+                    onPress={handleSendOTP}
+                    disabled={!canSendOtp}
+                    loading={loading}
+                    variant="primary"
+                    style={{ borderRadius: 12, minHeight: 52 }}
+                  />
+                </View>
+                  </View>
                 </View>
               </View>
-            </View>
-            </View>
-          </ScrollView>
+              </View>
+            </ScrollView>
 
-          <CountryPickerModal
-            visible={countryPickerVisible}
-            selectedCode={country.code}
-            onSelect={handleCountrySelect}
-            onClose={() => setCountryPickerVisible(false)}
+            <CountryPickerModal
+              visible={countryPickerVisible}
+              selectedCode={country.code}
+              onSelect={handleCountrySelect}
+              onClose={() => setCountryPickerVisible(false)}
+            />
+
+          <PolicyModal
+            visible={policyModal !== null}
+            type={policyModal ?? 'terms'}
+            onClose={() => setPolicyModal(null)}
           />
-
-        <PolicyModal
-          visible={policyModal !== null}
-          type={policyModal ?? 'terms'}
-          onClose={() => setPolicyModal(null)}
-        />
-        </KeyboardAvoidingView>
-      </Pressable>
-    </SafeAreaView>
+          </KeyboardAvoidingView>
+        </Pressable>
+      </SafeAreaView>
+      <SkipButton
+        onPress={handleSkipAsGuest}
+        disabled={loading}
+        accessibilityLabel="Skip login and continue as guest"
+      />
+    </View>
   );
 };
 

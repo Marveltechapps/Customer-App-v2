@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, Image, ScrollView, ImageSourcePropType } from 'react-native';
 import LifestyleCard, { LifestyleItem } from '../LifestyleCard';
 import { logger } from '@/utils/logger';
@@ -6,6 +6,10 @@ import { handleRedirect } from '../../utils/navigation/linkHandler';
 import { useNavigation } from '@react-navigation/native';
 import type { RootStackNavigationProp } from '../../types/navigation';
 import { bannerIsTapEnabled } from '@/utils/bannerInteraction';
+import { useResponsive } from '../../utils/responsive';
+
+/** Figma reference: header image slot 363.5 × 128. */
+const HEADER_IMAGE_ASPECT_RATIO = 363.5 / 128;
 
 interface LifestyleSectionProps {
   onItemPress?: (itemId: string) => void;
@@ -21,6 +25,7 @@ export default function LifestyleSection({
   blockStyle,
 }: LifestyleSectionProps) {
   const navigation = useNavigation<RootStackNavigationProp>();
+  const { wp, isTablet } = useResponsive();
   const [items, setItems] = useState<LifestyleItem[]>([]);
   const [loading, setLoading] = useState(false);
   const headerImg = headerImage;
@@ -44,6 +49,13 @@ export default function LifestyleSection({
     }
   }, [fetchItems]);
 
+  // Responsive card width: ~38% of screen on phones, ~22% on tablets (unless CMS overrides it).
+  const cardWidth = useMemo(() => {
+    if (blockStyle?.cardWidth != null) return blockStyle.cardWidth;
+    const target = isTablet ? wp(22) : wp(38);
+    return Math.round(Math.min(220, Math.max(120, target)));
+  }, [blockStyle?.cardWidth, isTablet, wp]);
+
   const handleItemPress = (itemId: string) => {
     const item = items.find((i) => i.id === itemId) as any;
     if (onItemPress) {
@@ -64,9 +76,11 @@ export default function LifestyleSection({
     logger.info('Lifestyle item pressed', { itemId });
   };
 
+  if (items.length === 0 && !loading) return null;
+
   return (
     <View style={styles.container}>
-      {/* Background Shape */}
+      {/* Background Shape — full-width/height fill instead of fixed Figma bleed */}
       <View style={styles.backgroundShape} />
 
       {/* Header Image */}
@@ -88,7 +102,7 @@ export default function LifestyleSection({
             key={item.id}
             style={[
               styles.cardWrapper,
-              blockStyle?.cardWidth != null && { minWidth: blockStyle.cardWidth, width: blockStyle.cardWidth },
+              { width: cardWidth },
               index === 0 && styles.firstCard,
               index === items.length - 1 && styles.lastCard,
             ]}
@@ -104,44 +118,31 @@ export default function LifestyleSection({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    height: 317,
     position: 'relative',
-    paddingHorizontal: 0,
     paddingTop: 16, // No top padding since spacing is handled by GreensBanner
     paddingBottom: 20,
     overflow: 'hidden',
   },
   backgroundShape: {
-    position: 'absolute',
-    left: -29,
-    top: 0,
-    width: 440,
-    height: 317,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#9DE8F7',
   },
   headerImageContainer: {
-    position: 'absolute',
-    left: 9.25,
-    top: 5,
-    width: 363.5,
-    height: 128,
+    width: '100%',
+    paddingHorizontal: 9,
     zIndex: 1,
   },
   headerImage: {
     width: '100%',
-    height: '100%',
+    aspectRatio: HEADER_IMAGE_ASPECT_RATIO,
   },
   scrollView: {
-    position: 'absolute',
-    left: 8,
-    top: 147.7,
-    right: 0,
-    height: 145,
+    width: '100%',
+    marginTop: 12,
     zIndex: 1,
   },
   scrollContent: {
-    paddingRight: 16,
-    paddingLeft: 0,
+    paddingHorizontal: 8,
   },
   cardWrapper: {
     marginRight: 16,
@@ -150,7 +151,6 @@ const styles = StyleSheet.create({
     marginLeft: 0,
   },
   lastCard: {
-    marginRight: 16,
+    marginRight: 8,
   },
 });
-

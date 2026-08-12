@@ -107,7 +107,7 @@ const OrderCanceledDetails: React.FC = () => {
   };
 
   const handleCallSupport = () => {
-    Linking.openURL(`tel:${appConfig.support?.contactPhone ?? '+919999999999'}`);
+    Linking.openURL(`tel:${appConfig.support?.contactPhone ?? '+919444183378'}`);
   };
 
   if (loading) {

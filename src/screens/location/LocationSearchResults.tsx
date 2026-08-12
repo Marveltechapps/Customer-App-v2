@@ -246,7 +246,6 @@ const styles = StyleSheet.create({
   resultTextContainer: {
     flex: 1,
     gap: 4,
-    width: 292.5,
   },
   resultTitleContainer: {
     width: '100%',

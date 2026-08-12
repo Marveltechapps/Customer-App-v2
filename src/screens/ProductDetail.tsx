@@ -10,7 +10,6 @@ import {
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -50,12 +49,13 @@ import { Theme } from '../constants/Theme';
 import { Colors } from '../constants/Colors';
 import { addOrIncrementCartLine } from '@/utils/cartActions';
 import { isVariantRowInCart } from '@/utils/productCardCart';
+import { canIncreaseCartQty, maxOrderLimitMessage } from '@/utils/cartConstants';
+import { useResponsive, getProductCarouselCardWidth, scaleFont } from '../utils/responsive';
 
 const SECTION_CARD_GAP = Theme.spacing.sectionCardGap;
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-/** Fixed hero band height; image uses cover to fill the band (may crop edges). */
-const PRODUCT_IMAGE_HEIGHT = 272;
+/** Hero image aspect ratio from design (393 design width / 272 design height). */
+const PRODUCT_IMAGE_ASPECT_RATIO = 272 / 393;
 
 function isMongoObjectId(id: string): boolean {
   return /^[a-f\d]{24}$/i.test(id);
@@ -121,6 +121,8 @@ interface ProductDetail {
   descriptionStructured?: NormalizedDescription;
   deliveryInfo?: string;
   gstRate?: number;
+  /** Master Sheet MaxOrderLimit — null = unlimited */
+  maxOrderLimit?: number | null;
   variants: Array<{
     id: string;
     productId?: string;
@@ -166,6 +168,12 @@ export default function ProductDetailScreen({
   const route = useRoute<RootStackRouteProp<'ProductDetail'>>();
   const routeParams = route.params || {};
   const { addToCart, updateQuantity, removeFromCart, getLineQuantity, cartItems } = useCart();
+  const { width: screenWidth, isTablet } = useResponsive();
+  const productImageHeight = Math.min(
+    Math.max(Math.round(screenWidth * PRODUCT_IMAGE_ASPECT_RATIO), 220),
+    isTablet ? 420 : 320,
+  );
+  const similarCardWidth = getProductCarouselCardWidth(screenWidth);
 
   // Get productId from props or params
   const productId = propProductId || routeParams.productId || '';
@@ -269,6 +277,10 @@ export default function ProductDetailScreen({
               descriptionStructured: descStructured,
               deliveryInfo: product?.deliveryInfo || '',
               gstRate: typeof product?.gstRate === 'number' ? product.gstRate : typeof product?.taxPercent === 'number' ? product.taxPercent : undefined,
+              maxOrderLimit:
+                product?.maxOrderLimit != null && Number(product.maxOrderLimit) > 0
+                  ? Math.floor(Number(product.maxOrderLimit))
+                  : null,
               variants: normalizedVariants,
             };
             setProductDetail(normalized);
@@ -387,6 +399,7 @@ export default function ProductDetailScreen({
         originalPrice: variantOriginalPrice,
         discount: productDetail.discount,
         gstRate: typeof productDetail.gstRate === 'number' ? productDetail.gstRate : 0,
+        maxOrderLimit: productDetail.maxOrderLimit ?? null,
       });
     }
   };
@@ -404,7 +417,11 @@ export default function ProductDetailScreen({
   };
 
   const handleIncrease = () => {
-    if (selectedVariantId && cartQuantity >= 0) {
+    if (
+      selectedVariantId &&
+      cartQuantity >= 0 &&
+      canIncreaseCartQty(cartQuantity, productDetail.maxOrderLimit)
+    ) {
       const newQuantity = cartQuantity + 1;
       updateQuantity(lineProductId, selectedVariantId, newQuantity);
     }
@@ -413,7 +430,7 @@ export default function ProductDetailScreen({
   // Handle image scroll to update current index
   const handleImageScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const scrollPosition = event.nativeEvent.contentOffset.x;
-    const index = Math.round(scrollPosition / SCREEN_WIDTH);
+    const index = Math.round(scrollPosition / screenWidth);
     setCurrentImageIndex(index);
   };
 
@@ -593,23 +610,23 @@ export default function ProductDetailScreen({
           showsVerticalScrollIndicator={false}
         >
           {/* Product Images Carousel */}
-          <View style={styles.productImageContainer}>
+          <View style={[styles.productImageContainer, { height: productImageHeight }]}>
             <FlatList
               data={productDetail.images}
               horizontal
               pagingEnabled
               showsHorizontalScrollIndicator={false}
-              style={styles.productImageCarousel}
+              style={[styles.productImageCarousel, { height: productImageHeight }]}
               keyExtractor={(item, index) => `image-${index}`}
               onScroll={handleImageScroll}
               scrollEventThrottle={16}
               getItemLayout={(_, index) => ({
-                length: SCREEN_WIDTH,
-                offset: SCREEN_WIDTH * index,
+                length: screenWidth,
+                offset: screenWidth * index,
                 index,
               })}
               renderItem={({ item }: { item: ImageSourcePropType }) => (
-                <View style={[styles.imageWrapper, { width: SCREEN_WIDTH }]}>
+                <View style={[styles.imageWrapper, { width: screenWidth, height: productImageHeight }]}>
                   <Image
                     source={item}
                     style={styles.productImageCover}
@@ -654,7 +671,7 @@ export default function ProductDetailScreen({
             {/* Product Name and Price */}
             <View style={styles.productHeader}>
               {!!productDetail.name && (
-                <Text style={styles.productName} numberOfLines={3}>
+                <Text style={[styles.productName, { fontSize: scaleFont(18, 16, 22) }]} numberOfLines={3}>
                   {productDetail.name}
                 </Text>
               )}
@@ -680,6 +697,12 @@ export default function ProductDetailScreen({
                 </View>
               </View>
             </View>
+
+            {maxOrderLimitMessage(productDetail.maxOrderLimit) ? (
+              <Text style={styles.maxOrderLimitText}>
+                {maxOrderLimitMessage(productDetail.maxOrderLimit)}
+              </Text>
+            ) : null}
 
             {/* Size Selector and Add Button */}
             <View style={styles.actionContainer}>
@@ -722,7 +745,7 @@ export default function ProductDetailScreen({
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.similarProductsScroll}>
               {similarProducts.map((product) => (
-                <View key={product.id} style={styles.similarProductCard}>
+                <View key={product.id} style={[styles.similarProductCard, { width: similarCardWidth }]}>
                   <ProductCard
                     product={product}
                     onCardPress={() => {
@@ -815,16 +838,12 @@ const styles = StyleSheet.create({
   },
   productImageContainer: {
     width: '100%',
-    height: PRODUCT_IMAGE_HEIGHT,
     backgroundColor: '#FFFFFF',
     position: 'relative',
     overflow: 'hidden',
   },
-  productImageCarousel: {
-    height: PRODUCT_IMAGE_HEIGHT,
-  },
+  productImageCarousel: {},
   imageWrapper: {
-    height: PRODUCT_IMAGE_HEIGHT,
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
   },
@@ -875,6 +894,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 24,
     color: '#222222',
+    fontFamily: 'Inter',
+  },
+  maxOrderLimitText: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 18,
+    color: '#555555',
     fontFamily: 'Inter',
   },
   priceContainer: {
@@ -1051,8 +1077,6 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingRight: 16,
   },
-  similarProductCard: {
-    width: 126.5,
-  },
+  similarProductCard: {},
 });
 

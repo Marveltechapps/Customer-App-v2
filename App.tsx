@@ -31,11 +31,12 @@
  */
 
 import React, { useRef, useEffect, useCallback } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
+import Constants from 'expo-constants';
 import type { RootStackParamList } from './src/types/navigation';
 import AppNavigator from './src/navigation/AppNavigator';
 import { CartProvider } from '@/contexts/CartContext';
@@ -47,17 +48,38 @@ import { AppConfigProvider } from './src/contexts/AppConfigContext';
 import ErrorBoundary from './src/components/common/ErrorBoundary';
 import { setupGlobalErrorHandler } from './src/utils/errorHandler';
 import { analytics } from './src/utils/analytics';
-import { APP_LAUNCH_ID } from './src/constants/appLaunch';
-import { ensureSplashOnLaunch, setNavigationRef as setGlobalNavRef } from './src/utils/navigationRef';
+import { setNavigationRef as setGlobalNavRef } from './src/utils/navigationRef';
 import { setupNotificationHandler } from './src/services/notifications/notificationService';
 import Toast from 'react-native-toast-message';
 import { logNativeModuleStatus } from './src/utils/nativeModuleCheck';
 import { getEnvConfigSafe, DEFAULT_BACKEND_PORT } from './src/config/env';
+import { initializeFirebase } from './src/config/firebase';
 
-SplashScreen.preventAutoHideAsync();
+/** Expo Go often shows a blank/white “splash”; never hold it. Dev/standalone builds keep branded splash briefly. */
+const isExpoGo = Constants.appOwnership === 'expo';
+
+async function hideNativeSplash(retries = 5): Promise<void> {
+  for (let i = 0; i < retries; i += 1) {
+    try {
+      await SplashScreen.hideAsync();
+      return;
+    } catch {
+      // ignore — already hidden or native module not ready
+    }
+  }
+}
+
+if (isExpoGo) {
+  void hideNativeSplash();
+} else {
+  void SplashScreen.preventAutoHideAsync();
+}
 
 // Ensure foreground notifications show alerts (set early at app boot)
 setupNotificationHandler();
+
+// Firebase JS SDK (env-driven). Safe no-op when config is missing. FCM token/permission not requested here.
+initializeFirebase();
 
 // Sentry Error Tracking
 // To enable Sentry error tracking:
@@ -102,14 +124,12 @@ const AppContent: React.FC = () => {
       }}
     >
       <NavigationContainer
-        key={APP_LAUNCH_ID}
         ref={(ref) => {
           const typed = ref as NavigationContainerRef<RootStackParamList> | null;
           navigationRef.current = typed;
           setNetworkNavRef(typed);
           setGlobalNavRef(typed);
         }}
-        onReady={ensureSplashOnLaunch}
       >
         <ErrorBoundary
           fallback={
@@ -143,13 +163,9 @@ function App() {
     Inter_700Bold,
   });
 
-  const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded || fontError) {
-      try {
-        await SplashScreen.hideAsync();
-      } catch (e) {
-        console.warn('Failed to hide splash screen:', e);
-      }
+  const onLayoutRootView = useCallback(() => {
+    if (fontsLoaded || fontError || isExpoGo) {
+      void hideNativeSplash();
     }
   }, [fontsLoaded, fontError]);
 
@@ -179,15 +195,10 @@ function App() {
         });
     }
 
-    // Aggressive fallback: Hide splash ASAP regardless of font loading
-    // This prevents the white screen issue if font loading is slow
-    const timer = setTimeout(async () => {
-      try {
-        await SplashScreen.hideAsync();
-      } catch (e) {
-        // Already hidden or app closed
-      }
-    }, 3000);
+    // Fallback hide — Expo Go ASAP; native builds shortly after first paint
+    const timer = setTimeout(() => {
+      void hideNativeSplash();
+    }, isExpoGo ? 100 : 800);
 
     return () => clearTimeout(timer);
   }, []);
@@ -205,7 +216,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <View style={{ flex: 1, backgroundColor: '#034703' }} onLayout={onLayoutRootView}>
         <SafeAreaProvider>
           <NetworkProvider>
             <AppConfigProvider>

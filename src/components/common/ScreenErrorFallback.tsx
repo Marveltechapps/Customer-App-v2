@@ -31,9 +31,14 @@ const ScreenErrorFallback: React.FC<ScreenErrorFallbackProps> = ({
         {/* Error Message */}
         <View style={styles.textContainer}>
           <Text style={styles.title}>Oops! Something went wrong</Text>
-          <Text style={styles.message}>
+          <Text style={styles.message} selectable>
             {error?.message || 'We encountered an unexpected error. Please try again.'}
           </Text>
+          {__DEV__ && error?.stack ? (
+            <Text style={styles.devStack} selectable>
+              {error.stack}
+            </Text>
+          ) : null}
         </View>
 
         {/* Action Buttons */}
@@ -109,6 +114,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontFamily: 'Inter',
+  },
+  devStack: {
+    marginTop: 12,
+    fontSize: 11,
+    color: '#4A5568',
+    textAlign: 'left',
+    lineHeight: 16,
+    fontFamily: 'monospace',
+    maxHeight: 160,
   },
   buttonContainer: {
     width: '100%',

@@ -73,7 +73,7 @@ const FAQ_DATA: Record<string, Array<{ question: string; answer: string }>> = {
     {
       question: 'What payment methods do you accept?',
       answer:
-        'We accept all major credit cards, debit cards, PayPal, and digital wallets like Apple Pay and Google Pay.',
+        'We accept Cash on Delivery, Selorg Wallet, and secure online payments (UPI, cards, net banking) via Worldline.',
     },
     {
       question: 'Is my payment information secure?',

@@ -5,13 +5,13 @@ import type { RootStackParamList } from '../types/navigation';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 import ScreenErrorFallback from '../components/common/ScreenErrorFallback';
 
-// Critical screens - load immediately
+// Critical first-paint screens only — keep Home/Login (icons, maps, video) out of Expo Go cold start
 import SplashScreen from '../screens/SplashScreen';
 import NoInternet from '../screens/NoInternet';
-import Login from '../screens/Login';
-import Home from '../screens/Home'; // Direct import to match MainTabNavigator
-import CategoryProducts from '../screens/CategoryProducts';
 // Lazy load other screens for better performance
+const Login = React.lazy(() => import('../screens/Login'));
+const Home = React.lazy(() => import('../screens/Home'));
+const CategoryProducts = React.lazy(() => import('../screens/CategoryProducts'));
 const SettingsScreen = React.lazy(() => import('../screens/SettingsScreen'));
 const Onboarding = React.lazy(() => import('../screens/Onboarding'));
 const OTPVerification = React.lazy(() => import('../screens/OTPVerification'));
@@ -26,6 +26,7 @@ const RefundsStack = React.lazy(() => import('./RefundsStack'));
 const Profile = React.lazy(() => import('../screens/Profile'));
 const GeneralInfoStack = React.lazy(() => import('./GeneralInfoStack'));
 const Notifications = React.lazy(() => import('../screens/Notifications'));
+const NotificationInbox = React.lazy(() => import('../screens/NotificationInbox'));
 const Checkout = React.lazy(() => import('../screens/Checkout'));
 const Payment = React.lazy(() => import('../screens/Payment'));
 const PaymentSuccess = React.lazy(() => import('../screens/PaymentSuccess'));
@@ -43,8 +44,8 @@ const CollectionProducts = React.lazy(() => import('../screens/CollectionProduct
 const AdminCms = React.lazy(() => import('../screens/admin/cms/CmsScreen'));
 
 const LoadingFallback = () => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' }}>
-    <ActivityIndicator size="large" color="#034703" />
+  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#034703' }}>
+    <ActivityIndicator size="large" color="#FFFFFF" />
   </View>
 );
 
@@ -115,7 +116,7 @@ const AppNavigator: React.FC = () => {
         />
         <Stack.Screen name="Onboarding" component={createLazyScreen(Onboarding, 'Onboarding')} />
         <Stack.Screen name="NoInternet" component={NoInternet} />
-        <Stack.Screen name="Login" component={Login} />
+        <Stack.Screen name="Login" component={createLazyScreen(Login, 'Login')} />
         <Stack.Screen name="OTPVerification" component={createLazyScreen(OTPVerification, 'OTPVerification')} />
         <Stack.Screen 
           name="VerificationSuccess" 
@@ -157,13 +158,14 @@ const AppNavigator: React.FC = () => {
         <Stack.Screen name="Profile" component={createLazyScreen(Profile, 'Profile')} />
         <Stack.Screen name="GeneralInfo" component={createLazyScreen(GeneralInfoStack, 'GeneralInfo')} />
         <Stack.Screen name="Notifications" component={createLazyScreen(Notifications, 'Notifications')} />
+        <Stack.Screen name="NotificationInbox" component={createLazyScreen(NotificationInbox, 'NotificationInbox')} />
         <Stack.Screen name="Coupons" component={createLazyScreen(Coupons, 'Coupons')} />
-        <Stack.Screen name="Home" component={Home} />
+        <Stack.Screen name="Home" component={createLazyScreen(Home, 'Home')} />
         <Stack.Screen name="Category" component={createLazyScreen(Category, 'Category')} />
         <Stack.Screen name="Search" component={createLazyScreen(Search, 'Search')} />
         <Stack.Screen name="SearchResults" component={createLazyScreen(SearchResults, 'SearchResults')} />
         <Stack.Screen name="ProductDetail" component={createLazyScreen(ProductDetail, 'ProductDetail')} />
-        <Stack.Screen name="CategoryProducts" component={CategoryProducts} />
+        <Stack.Screen name="CategoryProducts" component={createLazyScreen(CategoryProducts, 'CategoryProducts')} />
         <Stack.Screen name="CollectionProducts" component={createLazyScreen(CollectionProducts, 'CollectionProducts')} />
         <Stack.Screen name="DynamicPage" component={createLazyScreen(DynamicPage, 'DynamicPage')} />
         <Stack.Screen name="BannerDetail" component={createLazyScreen(BannerDetail, 'BannerDetail')} />
@@ -179,7 +181,8 @@ const AppNavigator: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    // Match splash brand color so Expo Go never flashes white between native splash → JS
+    backgroundColor: '#034703',
   },
 });
 

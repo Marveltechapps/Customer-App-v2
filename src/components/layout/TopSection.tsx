@@ -8,8 +8,12 @@ import SearchBar from '../features/search/SearchBar';
 import ProfileIconHome from '../icons/ProfileIconHome';
 import MuteIcon from '../icons/MuteIcon';
 import UnmuteIcon from '../icons/UnmuteIcon';
-import { useDimensions, scale, getSpacing, wp } from '../../utils/responsive';
+import { useResponsive, scale, wp } from '../../utils/responsive';
 import { logger } from '@/utils/logger';
+import {
+  formatUnreadBadge,
+  useUnreadNotificationCount,
+} from '../../hooks/useUnreadNotificationCount';
 
 interface TopSectionProps {
   deliveryType?: string;
@@ -26,134 +30,139 @@ interface TopSectionProps {
   isScreenFocused?: boolean; // New prop to track screen focus
 }
 
-// Video source - using the video file from assets/videos
+// Video source - local asset used when CMS does not provide a remote hero URL
 const homepageVideo = require('../../assets/videos/homepage_video.mp4');
+const isExpoGo = Constants.appOwnership === 'expo';
 
-  // Check if running in Expo Go
-  const isExpoGo = Constants.appOwnership === 'expo';
+/** Inner video component - uses expo-video */
+function HeroVideo({
+  videoSource,
+  containerHeight,
+  fadeGradientHeight,
+  isVisible,
+  isScreenFocused,
+  isMuted,
+  onToggleAudio,
+}: {
+  videoSource: { uri: string } | number;
+  containerHeight: number;
+  fadeGradientHeight: number;
+  isVisible: boolean;
+  isScreenFocused: boolean;
+  isMuted: boolean;
+  onToggleAudio: () => void;
+}) {
+  const source = typeof videoSource === 'object' ? videoSource.uri : videoSource;
+  const player = useVideoPlayer(source, (p) => {
+    p.loop = true;
+    p.muted = true; // Default to muted for reliable autoplay
+    p.play();
+  });
 
-  /** Inner video component - uses expo-video */
-  function HeroVideo({
-    videoSource,
-    containerHeight,
-    fadeGradientHeight,
-    isVisible,
-    isScreenFocused,
-    isMuted,
-    onToggleAudio,
-  }: {
-    videoSource: { uri: string } | number;
-    containerHeight: number;
-    fadeGradientHeight: number;
-    isVisible: boolean;
-    isScreenFocused: boolean;
-    isMuted: boolean;
-    onToggleAudio: () => void;
-  }) {
-    const source = typeof videoSource === 'object' ? videoSource.uri : videoSource;
-    const player = useVideoPlayer(source, (p) => {
-      p.loop = true;
-      p.muted = true; // Default to muted for reliable autoplay
-      p.play();
-    });
+  useEffect(() => {
+    player.muted = isMuted;
+  }, [isMuted, player]);
 
-    useEffect(() => {
-      player.muted = isMuted;
-    }, [isMuted, player]);
+  useEffect(() => {
+    if (isVisible && isScreenFocused) {
+      player.play();
+    } else {
+      player.pause();
+      // Auto-mute when paused or off-screen
+      player.muted = true;
+    }
+  }, [isVisible, isScreenFocused, player]);
 
-    useEffect(() => {
-      if (isVisible && isScreenFocused) {
+  // Update player source only if it actually changed to avoid flickering/restarts
+  const lastSourceRef = useRef(source);
+  useEffect(() => {
+    if (source !== lastSourceRef.current) {
+      void player.replaceAsync(source).then(() => {
         player.play();
-      } else {
-        player.pause();
-        // Auto-mute when paused or off-screen
-        player.muted = true;
-      }
-    }, [isVisible, isScreenFocused, player]);
+      });
+      lastSourceRef.current = source;
+    }
+  }, [source, player]);
 
-    // Update player source only if it actually changed to avoid flickering/restarts
-    const lastSourceRef = useRef(source);
-    useEffect(() => {
-      if (source !== lastSourceRef.current) {
-        void player.replaceAsync(source).then(() => {
-          player.play();
-        });
-        lastSourceRef.current = source;
-      }
-    }, [source, player]);
+  return (
+    <>
+      <VideoView
+        player={player}
+        style={[styles.backgroundVideo, { height: containerHeight }]}
+        contentFit="cover"
+        nativeControls={false}
+        fullscreenOptions={{ enable: false }}
+        startsPictureInPictureAutomatically={false}
+      />
+      <LinearGradient
+        colors={['#FFFFFF', 'rgba(255, 255, 255, 0)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={[styles.videoFadeGradient, { height: fadeGradientHeight }]}
+      />
+      <TouchableOpacity
+        style={[
+          styles.audioToggleButton,
+          {
+            bottom: scale(16),
+            right: scale(16),
+            width: scale(40),
+            height: scale(40),
+            borderRadius: scale(20),
+          },
+        ]}
+        onPress={onToggleAudio}
+        activeOpacity={0.7}
+      >
+        {isMuted ? (
+          <MuteIcon width={scale(24)} height={scale(24)} color="#FFFFFF" />
+        ) : (
+          <UnmuteIcon width={scale(24)} height={scale(24)} color="#FFFFFF" />
+        )}
+      </TouchableOpacity>
+    </>
+  );
+}
 
-    return (
-      <>
-        <VideoView
-          player={player}
-          style={[styles.backgroundVideo, { height: containerHeight }]}
-          contentFit="cover"
-          nativeControls={false}
-          fullscreenOptions={{ enable: false }}
-          startsPictureInPictureAutomatically={false}
-        />
-        <LinearGradient
-          colors={['#FFFFFF', 'rgba(255, 255, 255, 0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={[styles.videoFadeGradient, { height: fadeGradientHeight }]}
-        />
-        <TouchableOpacity
-          style={styles.audioToggleButton}
-          onPress={onToggleAudio}
-          activeOpacity={0.7}
-        >
-          {isMuted ? (
-            <MuteIcon width={24} height={24} color="#FFFFFF" />
-          ) : (
-            <UnmuteIcon width={24} height={24} color="#FFFFFF" />
-          )}
-        </TouchableOpacity>
-      </>
-    );
-  }
+export default function TopSection({
+  deliveryType = 'Delivery to Home',
+  address = '',
+  searchPlaceholder = 'Search for products',
+  heroVideoUrl,
+  onLocationPress,
+  onProfilePress,
+  onProfilePressIn,
+  onSearch,
+  onLayout,
+  isVisible = true,
+  isScreenFocused = true,
+}: TopSectionProps) {
+  const { width: screenWidth, getVideoHeroHeight, spacing } = useResponsive();
+  const videoContainerRef = useRef<View>(null);
+  const [isMuted, setIsMuted] = useState(true); // Audio state: default muted
+  const { count: unreadCount } = useUnreadNotificationCount();
+  const profileBadge = formatUnreadBadge(unreadCount);
 
-  export default function TopSection({
-    deliveryType = 'Delivery to Home',
-    address = '',
-    searchPlaceholder = 'Search for products',
-    heroVideoUrl,
-    onLocationPress,
-    onProfilePress,
-    onProfilePressIn,
-    onSearch,
-    onLayout,
-    isVisible = true,
-    isScreenFocused = true,
-  }: TopSectionProps) {
-    const { width: screenWidth } = useDimensions();
-    const videoContainerRef = useRef<View>(null);
-    const [isMuted, setIsMuted] = useState(true); // Audio state: default muted
+  // Use backend hero video URL when present, otherwise local asset (skip local in Expo Go to avoid huge download)
+  const hasRemoteVideo = Boolean(heroVideoUrl && typeof heroVideoUrl === 'string' && heroVideoUrl.trim());
+  const videoSource = useMemo(() => {
+    if (hasRemoteVideo) return { uri: heroVideoUrl!.trim() };
+    if (isExpoGo) return null;
+    return homepageVideo;
+  }, [hasRemoteVideo, heroVideoUrl]);
 
-    // Use backend hero video URL when present, otherwise local asset
-    const hasRemoteVideo = Boolean(heroVideoUrl && typeof heroVideoUrl === 'string' && heroVideoUrl.trim());
-    const videoSource = useMemo(() => {
-      return hasRemoteVideo ? { uri: heroVideoUrl!.trim() } : homepageVideo;
-    }, [hasRemoteVideo, heroVideoUrl]);
+  const shouldShowVideo = videoSource != null;
 
-    // Enable video player for both Expo Go and Dev Client
-    const shouldShowVideo = true;
-
-  // Video container height - explicit height for proper layout
-  const VIDEO_CONTAINER_HEIGHT = 400; // Increased by another 20% (300 * 1.20 = 360)
-  
-  // Responsive video dimensions - maintain aspect ratio from design (340/381)
+  // Full-width video height from aspect ratio — updates on rotation / tablet
   const videoDimensions = useMemo(() => {
-    const baseVideoHeight = (340 / 381) * screenWidth; // Maintain aspect ratio
-    const videoHeight = baseVideoHeight * 1.15; // Increased by 15% (previously 35%)
-    const fadeGradientHeight = videoHeight * 0.05; // 5% fade at top of video
-    
+    const containerHeight = getVideoHeroHeight();
+    const fadeGradientHeight = Math.max(spacing(12), containerHeight * 0.05);
     return {
-      videoHeight,
+      videoHeight: containerHeight,
       fadeGradientHeight,
-      containerHeight: VIDEO_CONTAINER_HEIGHT,
+      containerHeight,
     };
-  }, [screenWidth]);
+  }, [screenWidth, getVideoHeroHeight, spacing]);
 
   const handleVideoLayout = (event: any) => {
     const { y, height } = event.nativeEvent.layout;
@@ -176,26 +185,26 @@ const homepageVideo = require('../../assets/videos/homepage_video.mp4');
   return (
     <View style={styles.container}>
       {/* Video Container - Relative position with explicit height */}
-      <View 
+      <View
         ref={videoContainerRef}
         style={[
-          styles.videoContainer, 
-          { 
+          styles.videoContainer,
+          {
             height: videoDimensions.containerHeight,
-          }
+          },
         ]}
         onLayout={handleVideoLayout}
       >
         {/* Green Background Layer - Bottom (zIndex: 0) */}
-        <View 
+        <View
           style={[
-            styles.greenBackground, 
-            { height: videoDimensions.containerHeight }
-          ]} 
+            styles.greenBackground,
+            { height: videoDimensions.containerHeight },
+          ]}
         />
 
         {/* Video - Absolute position to overlay text */}
-        {shouldShowVideo ? (
+        {shouldShowVideo && videoSource != null ? (
           <HeroVideo
             videoSource={videoSource}
             containerHeight={videoDimensions.containerHeight}
@@ -206,39 +215,33 @@ const homepageVideo = require('../../assets/videos/homepage_video.mp4');
             onToggleAudio={handleToggleAudio}
           />
         ) : (
-          // Expo Go: no expo-video — show explicit unavailable state
-          <>
-            <View
-              style={[
-                styles.backgroundVideo,
-                {
-                  height: videoDimensions.containerHeight,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  backgroundColor: '#FFFFFF',
-                },
-              ]}
-            >
-              <Text style={styles.videoUnavailableText}>Video not available</Text>
-            </View>
-            {/* White gradient at top of fallback (top to 5%) */}
-            <LinearGradient
-              colors={['#FFFFFF', 'rgba(255, 255, 255, 0)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={[
-                styles.videoFadeGradient, 
-                { height: videoDimensions.fadeGradientHeight }
-              ]}
-            />
-          </>
+          // Expo Go / no video: keep brand green (never flash white)
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={[
+              styles.videoFadeGradient,
+              { height: videoDimensions.fadeGradientHeight },
+            ]}
+          />
         )}
       </View>
 
       {/* Top Content Section - Input, Location & Profile - Top Layer (zIndex: 10) */}
-      <View style={styles.topContent}>
+      <View
+        style={[
+          styles.topContent,
+          {
+            paddingHorizontal: spacing(14),
+            paddingTop: spacing(17),
+            paddingBottom: spacing(20),
+            gap: spacing(12),
+          },
+        ]}
+      >
         {/* Location and Profile Row */}
-        <View style={styles.locationProfileRow}>
+        <View style={[styles.locationProfileRow, { gap: Math.min(wp(28.85), spacing(48)) }]}>
           <View style={styles.locationContainer}>
             <LocationSelector
               deliveryType={deliveryType}
@@ -247,12 +250,22 @@ const homepageVideo = require('../../assets/videos/homepage_video.mp4');
             />
           </View>
           <TouchableOpacity
-            style={styles.profileButton}
+            style={[styles.profileButton, { width: scale(24), height: scale(24) }]}
             onPressIn={onProfilePressIn}
             onPress={onProfilePress}
             activeOpacity={0.7}
+            accessibilityLabel={
+              profileBadge
+                ? `Settings, ${unreadCount} unread notifications`
+                : 'Settings'
+            }
           >
             <ProfileIconHome />
+            {profileBadge ? (
+              <View style={styles.profileBadge}>
+                <Text style={styles.profileBadgeText}>{profileBadge}</Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
         </View>
 
@@ -274,7 +287,7 @@ const styles = StyleSheet.create({
     width: '100%',
     position: 'relative',
     overflow: 'hidden',
-    backgroundColor: '#034703', // Match green background for smoother transitions
+    backgroundColor: '#034703',
   },
   greenBackground: {
     position: 'absolute',
@@ -287,7 +300,7 @@ const styles = StyleSheet.create({
   },
   backgroundVideo: {
     width: '100%',
-    position: 'absolute', // Video inside is absolute to overlay text
+    position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
@@ -306,10 +319,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: getSpacing(14),
-    paddingTop: getSpacing(17),
-    paddingBottom: getSpacing(20),
-    gap: getSpacing(12),
     zIndex: 10,
   },
   locationProfileRow: {
@@ -317,17 +326,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     width: '100%',
-    gap: wp(28.85), // Responsive gap (108.18/375 * 100%)
   },
   locationContainer: {
     flex: 1,
+    minWidth: 0,
   },
   profileButton: {
-    width: scale(24),
-    height: scale(24),
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
+    position: 'relative',
+  },
+  profileBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ED0004',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  profileBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
   },
   searchBarContainer: {
     width: '100%',
@@ -341,22 +368,12 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     color: '#FFFFFF',
-    fontSize: scale(14),
+    fontSize: 14,
     fontFamily: 'Inter',
     fontWeight: '400',
   },
-  videoUnavailableText: {
-    color: '#6B7280',
-    fontSize: scale(14),
-    fontWeight: '500',
-  },
   audioToggleButton: {
     position: 'absolute',
-    bottom: getSpacing(16),
-    right: getSpacing(16),
-    width: scale(40),
-    height: scale(40),
-    borderRadius: scale(20),
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',

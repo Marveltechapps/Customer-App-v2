@@ -47,6 +47,8 @@ import PhoneIcon from '../assets/images/phone-icon.svg';
 import RupeeIcon from '../assets/images/rupee-icon.svg';
 import ChevronRightIcon from '../assets/images/chevron-right.svg';
 import ChatIconOrder from '../assets/images/chat-icon-order.svg';
+import { useResponsive } from '../utils/responsive';
+import CancelOrderSheet from '../components/order/CancelOrderSheet';
 
 type OrderStatusType = 'getting-packed' | 'on-the-way' | 'arrived';
 
@@ -111,6 +113,9 @@ const OrderStatusDetails: React.FC = () => {
   const { location: userLocation, getCurrentLocation } = useLocation();
   const { appConfig } = useAppConfig();
   const { orderId, status } = route.params;
+  const { width: screenWidth } = useResponsive();
+  const statusImageSize = Math.min(137.32, screenWidth * 0.3);
+  const statusCardGap = Math.max(16, Math.min(67, screenWidth * 0.14));
 
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [addressCoordinates, setAddressCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -118,6 +123,7 @@ const OrderStatusDetails: React.FC = () => {
 
   const [driverCoordinates, setDriverCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
   const [wsRef, setWsRef] = useState<WebSocket | null>(null);
+  const [cancelVisible, setCancelVisible] = useState(false);
 
   const fetchOrderDetails = useCallback(async () => {
       if (!orderId) return;
@@ -320,6 +326,12 @@ const OrderStatusDetails: React.FC = () => {
       deliveryFee,
       totalBill,
       createdAt: orderDetails.createdAt,
+      paymentMethodDisplay:
+        (orderDetails as any).paymentMethodDisplay ||
+        (orderDetails as any).paymentMethod?.detailDisplay ||
+        (orderDetails as any).paymentMethod?.display,
+      paymentMethodLines: (orderDetails as any).paymentMethod?.lines,
+      estimatedDeliveryMessage: (orderDetails as any).estimatedDeliveryMessage,
     };
     
     // Navigate directly to OrderItemsDetails screen, skipping any intermediate screens
@@ -352,8 +364,8 @@ const OrderStatusDetails: React.FC = () => {
     if (!orderDetails) return null;
 
     return (
-      <View style={styles.statusCard}>
-        <View style={styles.statusImageContainer}>
+      <View style={[styles.statusCard, { gap: statusCardGap }]}>
+        <View style={[styles.statusImageContainer, { width: statusImageSize, height: statusImageSize * (119.27 / 137.32) }]}>
           <Image
             source={require('../assets/images/product-image-order-35125f.png')}
             style={styles.statusImage}
@@ -588,21 +600,36 @@ const OrderStatusDetails: React.FC = () => {
               {/* Help Card */}
               {renderHelpCard()}
 
-              {/* Modify Order Button - only for pending/confirmed orders */}
-              {orderDetails.currentStatus &&
-                ['pending', 'confirmed'].includes(orderDetails.currentStatus) && (
-                <TouchableOpacity
-                  style={styles.modifyOrderButton}
-                  onPress={() => Alert.alert('Coming Soon', 'Order modification will be available in a future update.')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.modifyOrderButtonText}>Modify Order</Text>
-                </TouchableOpacity>
-              )}
+              {/* Cancel — eligibility enforced by can-cancel API */}
+              {orderId &&
+                orderDetails.currentStatus &&
+                ['pending', 'confirmed', 'getting-packed'].includes(
+                  orderDetails.currentStatus
+                ) && (
+                  <TouchableOpacity
+                    style={styles.cancelOrderBtn}
+                    onPress={() => setCancelVisible(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.cancelOrderBtnText}>Cancel order</Text>
+                  </TouchableOpacity>
+                )}
             </View>
           </View>
         </View>
       </ScrollView>
+
+      {orderId ? (
+        <CancelOrderSheet
+          visible={cancelVisible}
+          orderId={orderId}
+          onClose={() => setCancelVisible(false)}
+          onCancelled={(message) => {
+            Alert.alert('Order cancelled', message);
+            navigation.navigate('OrderCanceledDetails', { orderId });
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 };
@@ -658,11 +685,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 67, // Exact gap from Figma
   },
   statusImageContainer: {
-    width: 137.32,
-    height: 119.27,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -909,6 +933,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#034703',
+    lineHeight: 20,
+  },
+  cancelOrderBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#ED0004',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelOrderBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ED0004',
     lineHeight: 20,
   },
 });

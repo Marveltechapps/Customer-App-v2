@@ -18,6 +18,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import Header from '../components/layout/Header';
 import { useCart } from '@/contexts/CartContext';
+import { useAppConfig } from '@/contexts/AppConfigContext';
 import { cancelOrder, createOrder } from '../services/orders/orderService';
 import { addressService } from '../services/address/addressService';
 import { subscribeAddressesChanged } from '../utils/addressRefresh';
@@ -30,6 +31,8 @@ import type { RouteProp } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { IN_FLIGHT_PAYMENT_KEY, namespacedKey } from '../utils/storage';
 import StandalonePaymentFlow from './StandalonePaymentFlow';
+import { api } from '../services/api/client';
+import { endpoints } from '../services/api/endpoints';
 import {
   createWorldlineSession,
   openWorldlineGateway,
@@ -39,32 +42,51 @@ import {
   pollWorldlineStatus,
   type WorldlinePaymentStatus,
 } from '../services/payments/worldlineCheckout';
+import {
+  abortWorldlinePayment,
+  fetchPaymentRetryStatus,
+  preparePaymentRetry,
+  recordPaymentFailure,
+} from '../services/payments/paymentRetryService';
 
-type PaymentMethodOption = 'cash' | 'digital';
+type CheckoutMethodKind = 'cash' | 'digital' | 'wallet';
 type PaymentUiState = 'idle' | 'creating_order' | 'opening_gateway' | 'verifying' | 'paid' | 'failed' | 'pending_verification' | 'unknown' | 'error';
 
-const CHECKOUT_PAYMENT_METHODS: { id: PaymentMethodOption; label: string; description: string }[] = [
-  { id: 'cash', label: 'Cash on Delivery', description: 'Pay when your order arrives' },
-  {
-    id: 'digital',
-    label: 'Digital Payment',
-    description: 'Card, UPI, net banking, and wallets via secure Worldline gateway',
-  },
-];
+type ResolvedCheckoutMethod = {
+  key: string;
+  kind: CheckoutMethodKind;
+  label: string;
+  description: string;
+  disabled?: boolean;
+  disabledReason?: string;
+};
 
-function resolveInitialPaymentMethod(
-  value: RootStackParamList['Payment']['initialPaymentMethod'],
-): PaymentMethodOption {
-  if (value === 'cash') return 'cash';
-  if (value === 'digital' || value === 'card' || value === 'upi' || value === 'wallet') {
-    return 'digital';
-  }
-  return 'cash';
+function resolveCheckoutMethodKind(key: string): CheckoutMethodKind {
+  const k = String(key || '').toLowerCase();
+  if (k === 'cash' || k === 'cod') return 'cash';
+  if (k === 'wallet' || k === 'selorg_wallet') return 'wallet';
+  return 'digital';
 }
 
-/** Maps UI method to API order payload (backend accepts digital for gateway prepayment). */
-function toOrderPaymentMethodType(method: PaymentMethodOption): 'cash' | 'digital' {
-  return method === 'digital' ? 'digital' : 'cash';
+function toOrderPaymentMethodType(kind: CheckoutMethodKind): 'cash' | 'digital' | 'wallet' {
+  if (kind === 'cash') return 'cash';
+  if (kind === 'wallet') return 'wallet';
+  return 'digital';
+}
+
+function resolveInitialPaymentMethod(
+  value: string | undefined,
+): string {
+  if (!value) return '';
+  const v = String(value).toLowerCase();
+  if (v === 'cash' || v === 'cod') return 'cash';
+  if (v === 'wallet' || v === 'selorg_wallet') return 'wallet';
+  if (v === 'digital' || v === 'card' || v === 'upi') return 'digital';
+  return v;
+}
+
+function formatInr(amount: number): string {
+  return `₹${(Math.round((Number(amount) || 0) * 100) / 100).toFixed(0)}`;
 }
 
 const Payment: React.FC = () => {
@@ -75,10 +97,14 @@ const Payment: React.FC = () => {
   const { cartItems, clearCart, refreshCart, releaseEmptyCartLock } = useCart();
   const { location: contextLocation } = useLocation();
   const { user, userKey } = useUser();
+  const { appConfig } = useAppConfig();
 
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethodOption>(() =>
-    resolveInitialPaymentMethod(routeParams?.initialPaymentMethod),
+  const [selectedMethodKey, setSelectedMethodKey] = useState<string>(() =>
+    resolveInitialPaymentMethod(
+      (routeParams as { initialPaymentMethod?: string } | undefined)?.initialPaymentMethod,
+    ),
   );
+  const [walletBalance, setWalletBalance] = useState(0);
   const [paymentUiState, setPaymentUiState] = useState<PaymentUiState>('idle');
   const [paymentStatus, setPaymentStatus] = useState<WorldlinePaymentStatus | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
@@ -99,11 +125,133 @@ const Payment: React.FC = () => {
   const routeCustomerName = routeParams?.customerName ?? undefined;
   const routeCustomerEmail = routeParams?.customerEmail ?? undefined;
   const routeCustomerPhone = routeParams?.customerPhone ?? undefined;
+  /** Existing unpaid order — resume / retry payment (from Order Status banner). */
+  const resumeOrderId = String(routeParams?.orderId ?? '').trim() || null;
   const autoStartGatewayRef = useRef(false);
   const handlePlaceOrderRef = useRef<(() => Promise<void>) | null>(null);
+  const lastTxnIdRef = useRef<string | null>(null);
+
+  const walletEnabled = appConfig?.featureFlags?.enableWallet !== false;
+
+  const checkoutMethods = React.useMemo((): ResolvedCheckoutMethod[] => {
+        const fromApi = (Array.isArray(appConfig?.paymentMethods) ? appConfig.paymentMethods : [])
+      .filter((m) => m.isActive)
+      .filter((m) => {
+        const kind = resolveCheckoutMethodKind(m.key);
+        if (kind === 'wallet') return walletEnabled;
+        return true;
+      })
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    const base: ResolvedCheckoutMethod[] =
+      fromApi.length > 0
+        ? fromApi.map((m): ResolvedCheckoutMethod => ({
+            key: m.key,
+            kind: resolveCheckoutMethodKind(m.key),
+            label: m.label,
+            description: m.description,
+          }))
+        : (
+            [
+              {
+                key: 'wallet',
+                kind: 'wallet' as const,
+                label: 'Selorg Wallet',
+                description: 'Pay with your Selorg Wallet balance',
+              },
+              {
+                key: 'digital',
+                kind: 'digital' as const,
+                label: 'Digital Payment',
+                description: 'Card, UPI, net banking via secure payment',
+              },
+              {
+                key: 'cash',
+                kind: 'cash' as const,
+                label: 'Cash on Delivery',
+                description: 'Pay when your order arrives',
+              },
+            ] as ResolvedCheckoutMethod[]
+          ).filter((m) => (m.kind === 'wallet' ? walletEnabled : true));
+
+    return base.map((m) => {
+      if (m.kind !== 'wallet') return { ...m, disabled: false };
+      if (!(walletBalance > 0)) {
+        return {
+          ...m,
+          description: 'No balance available — add money in Profile → Wallet',
+          disabled: true,
+          disabledReason: 'Insufficient wallet balance',
+        };
+      }
+      if (totalBill > 0 && walletBalance >= totalBill) {
+        return {
+          ...m,
+          description: `Available ${formatInr(walletBalance)} · Pays this order in full`,
+          disabled: false,
+        };
+      }
+      if (totalBill > 0) {
+        const remaining = Math.max(0, Math.round((totalBill - walletBalance) * 100) / 100);
+        return {
+          ...m,
+          description: `Use ${formatInr(walletBalance)}, then pay ${formatInr(remaining)} online`,
+          disabled: false,
+        };
+      }
+      return {
+        ...m,
+        description: `Available balance ${formatInr(walletBalance)}`,
+        disabled: false,
+      };
+    });
+  }, [appConfig?.paymentMethods, walletEnabled, walletBalance, totalBill]);
+
+  const selectedMethod =
+    checkoutMethods.find((m) => m.key === selectedMethodKey) ||
+    checkoutMethods.find((m) => m.kind === resolveCheckoutMethodKind(selectedMethodKey)) ||
+    checkoutMethods[0] ||
+    null;
+  const selectedKind: CheckoutMethodKind = selectedMethod?.kind || 'cash';
+
+  useEffect(() => {
+    if (!selectedMethodKey && checkoutMethods.length > 0) {
+      setSelectedMethodKey(checkoutMethods[0].key);
+      return;
+    }
+    if (
+      selectedMethodKey &&
+      checkoutMethods.length > 0 &&
+      !checkoutMethods.some((m) => m.key === selectedMethodKey)
+    ) {
+      const byKind = checkoutMethods.find(
+        (m) => m.kind === resolveCheckoutMethodKind(selectedMethodKey),
+      );
+      setSelectedMethodKey(byKind?.key || checkoutMethods[0].key);
+    }
+  }, [checkoutMethods, selectedMethodKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get<{ balance?: number; data?: { balance?: number } }>(
+          endpoints.wallet.balance,
+        );
+        const balance = Number((res as any)?.data?.balance ?? (res as any)?.balance ?? 0);
+        if (!cancelled) setWalletBalance(Number.isFinite(balance) ? balance : 0);
+      } catch (err) {
+        logger.warn('Failed to load wallet balance for checkout', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userKey]);
 
   const gatewayProcessing =
-    paymentUiState === 'opening_gateway' && selectedMethod === 'digital';
+    paymentUiState === 'opening_gateway' &&
+    (selectedKind === 'digital' || selectedKind === 'wallet');
 
   const inFlightKey = namespacedKey(IN_FLIGHT_PAYMENT_KEY, userKey);
 
@@ -114,7 +262,9 @@ const Payment: React.FC = () => {
         const { orderId, method } = JSON.parse(stored);
         if (orderId) {
           setActiveOrderId(orderId);
-          setSelectedMethod(method === 'cash' ? 'cash' : 'digital');
+          setSelectedMethodKey(
+            method === 'cash' ? 'cash' : method === 'wallet' ? 'wallet' : 'digital',
+          );
           setPaymentUiState('verifying');
           const status = await pollWorldlineStatus(orderId, (s) => setPaymentStatus(s), 6);
           handleVerificationResult(status);
@@ -191,15 +341,70 @@ const Payment: React.FC = () => {
 
   const handlePlaceOrder = async () => {
     if (paymentUiState !== 'idle' && paymentUiState !== 'failed' && paymentUiState !== 'error') return;
+    if (!selectedMethod) {
+      Alert.alert('Payment Method', 'Please select a payment method.');
+      return;
+    }
+    if (selectedMethod.disabled) {
+      Alert.alert('Wallet Unavailable', selectedMethod.disabledReason || 'This payment method is unavailable.');
+      return;
+    }
 
     Animated.sequence([
       Animated.timing(placeOrderScale, { toValue: 0.95, duration: 100, useNativeDriver: true }),
       Animated.spring(placeOrderScale, { toValue: 1, tension: 300, friction: 10, useNativeDriver: true }),
     ]).start();
 
-    setPaymentUiState('creating_order');
-
     try {
+      // Resume unpaid order — skip createOrder; open Worldline for remaining amount.
+      const existingOrderId = resumeOrderId || activeOrderId;
+      if (existingOrderId && (selectedKind === 'digital' || selectedKind === 'wallet')) {
+        setPaymentUiState('creating_order');
+        const retryStatus = await fetchPaymentRetryStatus(existingOrderId).catch(() => null);
+        if (retryStatus && !retryStatus.canRetry) {
+          throw new Error(
+            retryStatus.reason || 'This payment cannot be retried. Please place a new order.'
+          );
+        }
+        await preparePaymentRetry(existingOrderId, { paymentMode: 'all' }).catch(() => undefined);
+
+        setActiveOrderId(existingOrderId);
+        await saveInFlightPayment(existingOrderId, selectedKind);
+        setPaymentUiState('opening_gateway');
+
+        const session = await createWorldlineSession({
+          orderId: existingOrderId,
+          consumerEmailId: routeCustomerEmail || user?.email,
+          consumerMobileNo: routeCustomerPhone || user?.phoneNumber,
+          paymentMode: 'all',
+        });
+        lastTxnIdRef.current = session.txnId;
+
+        const sdkResponse = await openWorldlineGateway(session.sessionPayload, {
+          hashAlgo: session.hashAlgo,
+        });
+        const { response: mergedGatewayResponse, debug: sdkDebug } =
+          buildWorldlineCompletePayload(sdkResponse);
+
+        setPaymentUiState('verifying');
+        await completeWorldlinePayment({
+          orderId: existingOrderId,
+          txnId: session.txnId,
+          response: mergedGatewayResponse,
+          ...(sdkDebug ? { debug: sdkDebug } : {}),
+        });
+
+        const finalStatus = await pollWorldlineStatus(
+          existingOrderId,
+          (s) => setPaymentStatus(s),
+          8
+        );
+        handleVerificationResult(finalStatus);
+        return;
+      }
+
+      setPaymentUiState('creating_order');
+
       const orderItems = cartItems.map((item) => ({
         productId: item.productId,
         variantId: item.variantId,
@@ -213,8 +418,13 @@ const Payment: React.FC = () => {
         return;
       }
 
-      const orderPaymentType = toOrderPaymentMethodType(selectedMethod);
-      const paymentMethodId = orderPaymentType === 'digital' ? 'worldline_digital' : '';
+      const orderPaymentType = toOrderPaymentMethodType(selectedKind);
+      const paymentMethodId =
+        orderPaymentType === 'digital'
+          ? 'worldline_digital'
+          : orderPaymentType === 'wallet'
+            ? 'selorg_wallet'
+            : '';
 
       const response = await createOrder({
         items: orderItems,
@@ -232,22 +442,39 @@ const Payment: React.FC = () => {
         throw new Error('Failed to create order');
       }
 
-      const orderId = response.data.id;
+      const order = response.data;
+      const orderId = order.id;
       setActiveOrderId(orderId);
-      await saveInFlightPayment(orderId, selectedMethod);
+      await saveInFlightPayment(orderId, selectedKind);
 
-      // Order lines are saved server-side; cart belongs to this order, not the next one.
-      await clearCart();
+      const payStatus = String(order.paymentStatus || '').toLowerCase();
+      const fullyPaidWithWallet =
+        selectedKind === 'wallet' &&
+        (payStatus === 'paid' || !order.requiresOnlinePayment);
 
       // 1. Cash on delivery — no Worldline gateway
-      if (selectedMethod === 'cash') {
+      if (selectedKind === 'cash') {
+        await clearCart();
         await finalizeOrder(orderId);
         return;
       }
 
-      // 2. Digital payment — Worldline Paynimo SDK (all methods: cards, UPI, net banking, wallets)
+      // 2. Full Selorg Wallet — paid server-side during createOrder
+      if (fullyPaidWithWallet) {
+        await clearCart();
+        await finalizeOrder(orderId);
+        return;
+      }
+
+      // Keep cart until online payment succeeds (digital or partial wallet).
+      // 3. Digital / partial wallet — Worldline for remaining amount
       setPaymentUiState('opening_gateway');
-      logger.info('Creating Worldline session', { orderId, paymentMode: 'all' });
+      logger.info('Creating Worldline session', {
+        orderId,
+        paymentMode: 'all',
+        walletDeduction: order.walletDeduction,
+        onlineAmountDue: order.onlineAmountDue,
+      });
 
       const session = await createWorldlineSession({
         orderId,
@@ -255,13 +482,14 @@ const Payment: React.FC = () => {
         consumerMobileNo: routeCustomerPhone || user?.phoneNumber,
         paymentMode: 'all',
       });
+      lastTxnIdRef.current = session.txnId;
 
       logger.info('Opening Worldline gateway', {
         txnId: session.txnId,
-        paymentMode: 'digital',
+        paymentMode: selectedKind,
         hashAlgo: session.hashAlgo,
       });
-      
+
       const sdkResponse = await openWorldlineGateway(session.sessionPayload, { hashAlgo: session.hashAlgo });
 
       const sdkKeys =
@@ -291,7 +519,6 @@ const Payment: React.FC = () => {
         ...(sdkDebug ? { debug: sdkDebug } : {}),
       });
 
-      // Start polling for final status (more aggressive for immediate verification)
       logger.info('Starting payment status polling', { orderId });
       const finalStatus = await pollWorldlineStatus(orderId, (s) => setPaymentStatus(s), 8);
       handleVerificationResult(finalStatus);
@@ -300,13 +527,18 @@ const Payment: React.FC = () => {
       logger.error('Payment flow failed', {
         error: error?.message,
         code: error?.code,
-        orderId: activeOrderId,
+        orderId: activeOrderId || resumeOrderId,
       });
       setPaymentUiState('error');
-      
+      await refreshCart().catch(() => undefined);
+
       const errorMessage = error?.message || 'Something went wrong. Please check your connection and try again.';
       const isUserCancellation = errorMessage.toLowerCase().includes('cancel') || errorMessage.toLowerCase().includes('user');
-      
+      const failOrderId = activeOrderId || resumeOrderId;
+      if (failOrderId && !isUserCancellation) {
+        void recordPaymentFailure(failOrderId, errorMessage);
+      }
+
       Alert.alert(
         isUserCancellation ? 'Payment Cancelled' : 'Payment Error',
         errorMessage,
@@ -321,10 +553,17 @@ const Payment: React.FC = () => {
   handlePlaceOrderRef.current = handlePlaceOrder;
 
   useEffect(() => {
+    if (resumeOrderId) {
+      setActiveOrderId(resumeOrderId);
+    }
+  }, [resumeOrderId]);
+
+  useEffect(() => {
     if (!autoStartGateway) return;
     if (autoStartGatewayRef.current) return;
-    if (selectedMethod !== 'digital') return;
-    if (!addressId && !routeAddressId) return;
+    if (selectedKind !== 'digital' && selectedKind !== 'wallet') return;
+    // Fresh checkout needs an address; resume/retry only needs orderId.
+    if (!resumeOrderId && !addressId && !routeAddressId) return;
     if (paymentUiState !== 'idle') return;
 
     autoStartGatewayRef.current = true;
@@ -332,12 +571,12 @@ const Payment: React.FC = () => {
       void handlePlaceOrderRef.current?.();
     }, 400);
     return () => clearTimeout(timer);
-  }, [autoStartGateway, selectedMethod, addressId, routeAddressId, paymentUiState]);
+  }, [autoStartGateway, selectedKind, addressId, routeAddressId, paymentUiState, resumeOrderId]);
 
   const finalizeOrder = async (orderId: string) => {
     try {
       // Coupon redemption for digital payment runs on backend after payment (releaseOrderFulfillment)
-      if (appliedCoupon && selectedMethod !== 'digital') {
+      if (appliedCoupon && selectedKind !== 'digital' && selectedKind !== 'wallet') {
         await couponService.redeemCoupon({
           coupon_code: appliedCoupon.code,
           user_id: userKey,
@@ -349,7 +588,7 @@ const Payment: React.FC = () => {
             price: item.price,
           })),
           cart_value: totalBill,
-          payment_method: selectedMethod.toUpperCase(),
+          payment_method: selectedKind.toUpperCase(),
           zone: contextLocation?.area || '',
           delivery_fee: 0
         }).catch(err => logger.warn('Coupon redemption failed (non-blocking)', err));
@@ -447,6 +686,19 @@ const Payment: React.FC = () => {
               void (async () => {
                 try {
                   setCancellingPayment(true);
+                  const txnId =
+                    lastTxnIdRef.current ||
+                    paymentStatus?.latestPayment?.txnId ||
+                    '';
+                  if (txnId) {
+                    await abortWorldlinePayment(
+                      orderId,
+                      txnId,
+                      'user_cancelled'
+                    ).catch((err) =>
+                      logger.warn('Worldline abort failed; falling back to cancelOrder', err)
+                    );
+                  }
                   await cancelOrder(orderId);
                   releaseEmptyCartLock();
                   await refreshCart();
@@ -496,7 +748,7 @@ const Payment: React.FC = () => {
 
   const standaloneSession = route.params?.standaloneSession;
   if (standaloneSession) {
-    return <StandalonePaymentFlow standalone={standaloneSession} navigation={navigation} />;
+    return <StandalonePaymentFlow standalone={standaloneSession} navigation={navigation as any} />;
   }
 
   if (gatewayProcessing) {
@@ -640,20 +892,28 @@ const Payment: React.FC = () => {
             <Text style={styles.sectionTitle}>Select Payment Method</Text>
           </View>
 
-          {CHECKOUT_PAYMENT_METHODS.map((method) => {
-            const isSelected = selectedMethod === method.id;
+          {checkoutMethods.map((method) => {
+            const isSelected = selectedMethodKey === method.key;
             return (
               <View
-                key={method.id}
+                key={method.key}
                 style={[
                   styles.methodWrapper,
                   isSelected && styles.methodWrapperSelected,
+                  method.disabled && { opacity: 0.55 },
                 ]}
               >
                 <TouchableOpacity
                   style={styles.methodCard}
                   onPress={() => {
-                    setSelectedMethod(method.id);
+                    if (method.disabled) {
+                      Alert.alert(
+                        'Wallet Unavailable',
+                        method.disabledReason || 'Add money to your Selorg Wallet to use this option.',
+                      );
+                      return;
+                    }
+                    setSelectedMethodKey(method.key);
                   }}
                   activeOpacity={0.7}
                   disabled={paymentUiState !== 'idle' && paymentUiState !== 'failed'}
@@ -667,6 +927,11 @@ const Payment: React.FC = () => {
                         {method.label}
                       </Text>
                       <Text style={styles.methodDescription}>{method.description}</Text>
+                      {method.kind === 'wallet' && !method.disabled ? (
+                        <Text style={[styles.methodDescription, { color: '#034703', marginTop: 4 }]}>
+                          Balance {formatInr(walletBalance)}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -678,9 +943,13 @@ const Payment: React.FC = () => {
           <View style={styles.infoCard}>
             <Text style={styles.infoIcon}>🔒</Text>
             <Text style={styles.infoText}>
-              {selectedMethod === 'cash'
+              {selectedKind === 'cash'
                 ? 'You will pay the delivery partner in cash when your order arrives.'
-                : 'You will be redirected to the Worldline payment gateway to complete payment.'}
+                : selectedKind === 'wallet'
+                  ? walletBalance >= totalBill && totalBill > 0
+                    ? 'Your Selorg Wallet balance will be used to pay for this order in full.'
+                    : 'Available wallet balance will be applied first; you will complete the remaining amount securely online.'
+                  : 'You will be redirected to the Worldline payment gateway to complete payment.'}
             </Text>
           </View>
         </ScrollView>
@@ -690,12 +959,19 @@ const Payment: React.FC = () => {
       <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Animated.View style={{ transform: [{ scale: placeOrderScale }], width: '100%' }}>
           {(() => {
-            const isDisabled = paymentUiState !== 'idle' && paymentUiState !== 'failed' && paymentUiState !== 'error';
+            const isDisabled =
+              (paymentUiState !== 'idle' && paymentUiState !== 'failed' && paymentUiState !== 'error') ||
+              !!selectedMethod?.disabled;
             const buttonDisabled = isDisabled;
 
             let buttonLabel = `Place Order  •  ₹${totalBill.toFixed(0)}`;
-            if (selectedMethod === 'digital') {
+            if (selectedKind === 'digital') {
               buttonLabel = `Pay via Worldline  •  ₹${totalBill.toFixed(0)}`;
+            } else if (selectedKind === 'wallet') {
+              buttonLabel =
+                walletBalance >= totalBill && totalBill > 0
+                  ? `Pay with Wallet  •  ₹${totalBill.toFixed(0)}`
+                  : `Pay with Wallet + Online  •  ₹${totalBill.toFixed(0)}`;
             }
 
             return (

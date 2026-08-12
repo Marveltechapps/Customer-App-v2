@@ -1,21 +1,28 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, StatusBar, Animated, Easing, Image } from 'react-native';
+import { View, StyleSheet, StatusBar, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RootStackNavigationProp, RootStackRouteProp } from '../types/navigation';
-import { APP_LAUNCH_ID } from '../constants/appLaunch';
+import { APP_LAUNCH_ID, markSplashCompleted } from '../constants/appLaunch';
 import Text from '../components/common/Text';
 import { tokenManager } from '../services/api/tokenManager';
 import * as storage from '../utils/storage';
 import { logger } from '@/utils/logger';
+import { useResponsive } from '@/utils/responsive';
 
-const splashLogo = require('../../assets/selorg-logo.png');
+import SplashLogo from '../assets/images/splash-logo.svg';
 
 const SplashScreen: React.FC = () => {
   const navigation = useNavigation<RootStackNavigationProp>();
   const route = useRoute<RootStackRouteProp<'Splash'>>();
   const splashNext = route.params?.next;
-  
+  const { wp, scaleFont } = useResponsive();
+  const logoSize = Math.min(wp(70), 340);
+  const titleFontSize = scaleFont(24, 20, 30);
+  const subtitleFontSize = scaleFont(16, 14, 20);
+  const navigationRef = useRef(navigation);
+  navigationRef.current = navigation;
+
   // Animation values
   const logoScale = useRef(new Animated.Value(0)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -25,6 +32,8 @@ const SplashScreen: React.FC = () => {
   const subtitleTranslateY = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
+    markSplashCompleted();
+
     // Logo animation - scale and fade in together (0-600ms)
     const logoAnimation = Animated.parallel([
       Animated.timing(logoScale, {
@@ -75,41 +84,59 @@ const SplashScreen: React.FC = () => {
       }),
     ]);
 
-    // Start all animations
     logoAnimation.start();
     titleAnimation.start();
     subtitleAnimation.start();
 
+    let cancelled = false;
     const navigationTimer = setTimeout(async () => {
+      if (cancelled) return;
+      const nav = navigationRef.current;
       try {
         await tokenManager.initialize();
+        if (cancelled) return;
         if (tokenManager.isTokenValid()) {
           logger.info('Valid session found, navigating to MainTabs');
-          navigation.replace('MainTabs');
+          nav.replace('MainTabs');
           return;
         }
         if (splashNext === 'Login') {
           logger.info('Splash complete, navigating to Login');
-          navigation.replace('Login', { fromSplash: APP_LAUNCH_ID });
+          nav.replace('Login', { fromSplash: APP_LAUNCH_ID });
           return;
         }
         const onboardingDone = await storage.getOnboardingCompleted();
+        if (cancelled) return;
         if (onboardingDone) {
           logger.info('Onboarding completed without a valid session, navigating to Login');
-          navigation.replace('Login', { fromSplash: APP_LAUNCH_ID });
+          nav.replace('Login', { fromSplash: APP_LAUNCH_ID });
         } else {
-          navigation.replace('Onboarding');
+          nav.replace('Onboarding');
         }
       } catch (err) {
-        logger.warn('Splash auth check failed, defaulting to Onboarding', err);
-        navigation.replace('Onboarding');
+        if (cancelled) return;
+        logger.warn('Splash auth check failed; routing by onboarding flag', err);
+        try {
+          const onboardingDone = await storage.getOnboardingCompleted();
+          if (cancelled) return;
+          if (onboardingDone) {
+            nav.replace('Login', { fromSplash: APP_LAUNCH_ID });
+          } else {
+            nav.replace('Onboarding');
+          }
+        } catch {
+          nav.replace('Login', { fromSplash: APP_LAUNCH_ID });
+        }
       }
     }, 2500);
 
     return () => {
+      cancelled = true;
       clearTimeout(navigationTimer);
     };
-  }, [navigation, splashNext]);
+    // Intentionally omit `navigation` — identity churn was resetting the 2.5s timer and looping splash.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [splashNext]);
 
   return (
     <View style={styles.container}>
@@ -121,12 +148,14 @@ const SplashScreen: React.FC = () => {
             style={[
               styles.logoContainer,
               {
+                width: logoSize,
+                height: logoSize,
                 opacity: logoOpacity,
                 transform: [{ scale: logoScale }],
               },
             ]}
           >
-            <Image source={splashLogo} style={styles.logo} resizeMode="contain" />
+            <SplashLogo width={logoSize} height={logoSize} />
           </Animated.View>
 
           {/* Text Content with animation */}
@@ -141,7 +170,7 @@ const SplashScreen: React.FC = () => {
               ]}
             >
               <View style={styles.titleContainer}>
-                <Text style={styles.title}>Avoid poison on your plate</Text>
+                <Text style={[styles.title, { fontSize: titleFontSize }]}>Avoid poison on your plate</Text>
               </View>
             </Animated.View>
 
@@ -154,7 +183,7 @@ const SplashScreen: React.FC = () => {
                 },
               ]}
             >
-              <Text style={styles.subtitle}>
+              <Text style={[styles.subtitle, { fontSize: subtitleFontSize }]}>
                 India's first lab-tested organic grocery app
               </Text>
             </Animated.View>
@@ -182,14 +211,8 @@ const styles = StyleSheet.create({
     gap: 48,
   },
   logoContainer: {
-    width: 300,
-    height: 300,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  logo: {
-    width: 300,
-    height: 300,
   },
   textContainer: {
     alignItems: 'center',

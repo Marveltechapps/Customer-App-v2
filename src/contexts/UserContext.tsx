@@ -12,6 +12,16 @@ import {
   getLastNotificationResponse,
   type NotificationSubscriptionLike,
 } from '../services/notifications/notificationService';
+import {
+  registerFcmTokenAfterLogin,
+  startFcmTokenRefreshListener,
+  stopFcmTokenRefreshListener,
+  syncFcmTokenToBackend,
+} from '../services/notifications/fcmTokenService';
+import {
+  startFcmForegroundHandlers,
+  stopFcmForegroundHandlers,
+} from '../services/notifications/fcmMessagingHandlers';
 import { navigateFromNotification, setOnLogoutCallback } from '../utils/navigationRef';
 
 interface User {
@@ -27,6 +37,8 @@ interface UserContextValue {
   isRestoring: boolean;
   isAuthenticated: boolean;
   expoPushToken: string | null;
+  /** Native FCM device token when available (Android + iOS via Firebase Messaging). */
+  fcmToken: string | null;
   /**
    * Primary identifier for user-specific data (e.g. storage keys).
    * Prefers phoneNumber (normalized) as requested, falls back to _id, then "guest".
@@ -40,8 +52,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isRestoring, setIsRestoring] = useState(true);
   const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
   const notificationListener = useRef<NotificationSubscriptionLike | null>(null);
   const responseListener = useRef<NotificationSubscriptionLike | null>(null);
+  const fcmRefreshListener = useRef<NotificationSubscriptionLike | null>(null);
+  const fcmForegroundListener = useRef<NotificationSubscriptionLike | null>(null);
   const expoGoPushWarnedRef = useRef(false);
 
   useEffect(() => {
@@ -54,6 +69,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (raw && mounted) {
             setUser(JSON.parse(raw));
           }
+        }
+        const storedFcm = await storage.getFcmToken();
+        if (mounted && storedFcm) {
+          setFcmToken(storedFcm);
         }
       } catch (err) {
         logger.warn('Failed to restore user session', err);
@@ -77,6 +96,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setExpoPushToken(token);
         await savePushTokenToBackend(token);
       }
+
+      // Native FCM (Android expo path / iOS RNFB Messaging) — secure store + backend sync.
+      const fcmResult = await registerFcmTokenAfterLogin();
+      if (fcmResult?.token) {
+        setFcmToken(fcmResult.token);
+      }
     } catch (err) {
       logger.warn('Push notification setup failed', err);
     }
@@ -97,6 +122,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Normal flow for dev builds / standalone apps
     setupPushNotifications();
+
+    fcmRefreshListener.current = startFcmTokenRefreshListener((refreshed) => {
+      setFcmToken(refreshed.token);
+      // Re-sync after rotation while the user remains authenticated.
+      if (tokenManager.isTokenValid()) {
+        syncFcmTokenToBackend(refreshed.token).catch(() => {});
+      }
+    });
+
+    // iOS FCM: open-from-notification + foreground receive (banner via AppDelegate willPresent).
+    fcmForegroundListener.current = startFcmForegroundHandlers();
 
     getLastNotificationResponse().then((response) => {
       if (response) {
@@ -135,6 +171,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       notificationListener.current?.remove();
       responseListener.current?.remove();
+      fcmRefreshListener.current?.remove();
+      fcmForegroundListener.current?.remove();
+      stopFcmTokenRefreshListener();
+      stopFcmForegroundHandlers();
     };
   }, [user, isRestoring, setupPushNotifications]);
 
@@ -149,7 +189,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user]);
 
   return (
-    <UserContext.Provider value={{ user, setUser, isRestoring, isAuthenticated, expoPushToken, userKey }}>
+    <UserContext.Provider value={{ user, setUser, isRestoring, isAuthenticated, expoPushToken, fcmToken, userKey }}>
       {children}
     </UserContext.Provider>
   );
@@ -162,4 +202,3 @@ export function useUser() {
 }
 
 export default UserContext;
-

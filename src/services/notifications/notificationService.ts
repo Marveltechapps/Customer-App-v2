@@ -58,6 +58,9 @@ function ensureNotificationHandler(): NotificationModule | null {
   return Notifications;
 }
 
+/** Shared access for FCM / other notification modules (lazy-loads expo-notifications). */
+export { ensureNotificationHandler };
+
 /**
  * Set up the notification handler so alerts show in the foreground.
  * Call this at app boot (e.g. in App.tsx) for best results.

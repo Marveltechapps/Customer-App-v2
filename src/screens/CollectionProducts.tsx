@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useRefreshOnFocus } from '../hooks/useRefreshOnFocus';
 import {
   View,
@@ -20,6 +20,7 @@ import { getApiErrorMessage } from '../services/api/types';
 import { getProductImageSource } from '../utils/productImage';
 import { formatProductDiscountLabel, resolveProductOriginalPrice } from '../utils/productPricing';
 import { variantRowsFromApiProduct } from '../utils/productVariants';
+import { getGridMetrics, scaleFont, useResponsive } from '../utils/responsive';
 
 function mapProduct(p: any): Product {
   const id = String(p._id ?? p.id ?? '');
@@ -33,7 +34,12 @@ function mapProduct(p: any): Product {
     discount: formatProductDiscountLabel(p),
     quantity: p.quantity ?? rows[0]?.size ?? '',
     variants: rows,
-    gstRate: typeof p.gstRate === 'number' ? p.gstRate : typeof p.taxPercent === 'number' ? p.taxPercent : undefined,
+    gstRate:
+      typeof p.gstRate === 'number'
+        ? p.gstRate
+        : typeof p.taxPercent === 'number'
+          ? p.taxPercent
+          : undefined,
   };
 }
 
@@ -41,9 +47,22 @@ export default function CollectionProducts() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const route = useRoute<RootStackRouteProp<'CollectionProducts'>>();
   const { collectionId } = route.params;
+  const { width: screenWidth } = useResponsive();
   const [collection, setCollection] = useState<{ name: string; products: Product[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const grid = useMemo(
+    () =>
+      getGridMetrics(screenWidth, {
+        gap: 12,
+        horizontalPadding: 12,
+        minColumns: 2,
+        maxColumns: 4,
+        preferredCardWidth: 140,
+      }),
+    [screenWidth],
+  );
 
   const loadCollection = useCallback(async () => {
     setLoading(true);
@@ -88,21 +107,31 @@ export default function CollectionProducts() {
     );
   }
 
+  const titleSize = scaleFont(18, 16, 22);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <BackIcon />
         </TouchableOpacity>
-        <Text style={styles.title}>{collection.name}</Text>
+        <Text style={[styles.title, { fontSize: titleSize }]} numberOfLines={1}>
+          {collection.name}
+        </Text>
       </View>
-      <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.grid,
+          { paddingHorizontal: grid.horizontalPadding, gap: grid.gap },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {collection.products.map((p) => (
-          <View key={p.id} style={styles.cardWrap}>
-            <ProductCard
-              product={p}
-              onPress={() => navigation.navigate('ProductDetail', { productId: p.id })}
-            />
+          <View key={p.id} style={{ width: grid.cardWidth }}>
+            <ProductCard product={p} width={grid.cardWidth} />
           </View>
         ))}
       </ScrollView>
@@ -113,11 +142,32 @@ export default function CollectionProducts() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },
-  title: { fontSize: 18, fontWeight: '600', marginLeft: 12 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', padding: 12, paddingBottom: 80 },
-  cardWrap: { width: '50%', padding: 6 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  title: {
+    fontWeight: '600',
+    marginLeft: 12,
+    flex: 1,
+    color: '#1A1A1A',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingTop: 12,
+    paddingBottom: 80,
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
   errorText: { color: '#666', fontSize: 14, marginBottom: 16 },
   backBtn: { padding: 12, backgroundColor: '#034703', borderRadius: 8 },
   backBtnText: { color: '#FFF', fontSize: 14 },

@@ -44,9 +44,10 @@ const NoInternet: React.FC<NoInternetScreenProps> = () => {
     if (previousRoute) {
       (navigation.navigate as any)(previousRoute.name, previousRoute.params);
     } else {
+      // Prefer MainTabs over Splash so reconnect/reload does not replay the splash screen.
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Splash' }],
+        routes: [{ name: 'MainTabs' }],
       });
     }
   };

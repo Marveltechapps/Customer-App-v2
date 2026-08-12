@@ -115,7 +115,7 @@ apk/
 
 # Dev / tooling (not needed for production)
 postman/
-scripts/
+# Keep scripts/ tracked — package.json postinstall needs patch-expo-cli-fetch-cache.mjs on EAS.
 shell-commands/
 
 # Build output
@@ -157,4 +157,3 @@ HOME_SCREEN_DYNAMIC_ELEMENTS.md
 
 # EAS / Expo build
 .easignore
-eas.json

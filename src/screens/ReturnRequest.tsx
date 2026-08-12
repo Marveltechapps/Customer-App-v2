@@ -7,18 +7,28 @@ import {
   StatusBar,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Header from '../components/layout/Header';
+import {
+  createRefundRequest,
+  type RefundRequestPayload,
+} from '../services/refunds/refundsService';
+import { logger } from '@/utils/logger';
 
-const RETURN_REASONS = [
-  'Received wrong item',
-  'Item damaged or defective',
-  'Quality not as expected',
-  'Item expired or near expiry',
-  'Missing items from order',
-  'Other',
+const RETURN_REASONS: Array<{
+  label: string;
+  reasonCode: RefundRequestPayload['reasonCode'];
+}> = [
+  { label: 'Received wrong item', reasonCode: 'wrong_item' },
+  { label: 'Item damaged or defective', reasonCode: 'item_damaged' },
+  { label: 'Quality not as expected', reasonCode: 'other' },
+  { label: 'Item expired or near expiry', reasonCode: 'expired' },
+  { label: 'Missing items from order', reasonCode: 'wrong_item' },
+  { label: 'Delivery was late', reasonCode: 'late_delivery' },
+  { label: 'Other', reasonCode: 'other' },
 ];
 
 const ReturnRequest: React.FC = () => {
@@ -34,16 +44,36 @@ const ReturnRequest: React.FC = () => {
       Alert.alert('Select Reason', 'Please select a reason for the return.');
       return;
     }
+    if (!orderId) {
+      Alert.alert('Missing order', 'Open this screen from an order to request a return.');
+      return;
+    }
+
+    const mapped = RETURN_REASONS.find((r) => r.label === selectedReason);
+    if (!mapped) {
+      Alert.alert('Select Reason', 'Please select a valid reason.');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await new Promise((r) => setTimeout(r, 500));
+      await createRefundRequest({
+        orderId,
+        reasonCode: mapped.reasonCode,
+        reasonText: selectedReason,
+      });
       Alert.alert(
         'Request Submitted',
         'Your return request has been submitted. Our team will review it shortly.',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
-    } catch {
-      Alert.alert('Error', 'Failed to submit return request. Please try again.');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Failed to submit return request. Please try again.';
+      logger.error('Return request failed', err);
+      Alert.alert('Error', message);
     } finally {
       setSubmitting(false);
     }
@@ -59,10 +89,16 @@ const ReturnRequest: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.formContainer}>
-          {orderId && (
+          {orderId ? (
             <View style={styles.orderIdCard}>
               <Text style={styles.orderIdLabel}>Order</Text>
               <Text style={styles.orderIdValue}>#{orderId}</Text>
+            </View>
+          ) : (
+            <View style={styles.orderIdCard}>
+              <Text style={styles.orderIdLabel}>
+                No order selected. Go back and open Return from an order.
+              </Text>
             </View>
           )}
 
@@ -70,29 +106,30 @@ const ReturnRequest: React.FC = () => {
             <Text style={styles.sectionTitle}>Reason for Return</Text>
             {RETURN_REASONS.map((reason) => (
               <TouchableOpacity
-                key={reason}
+                key={reason.label}
                 style={[
                   styles.reasonOption,
-                  selectedReason === reason && styles.reasonOptionSelected,
+                  selectedReason === reason.label && styles.reasonOptionSelected,
                 ]}
-                onPress={() => setSelectedReason(reason)}
+                onPress={() => setSelectedReason(reason.label)}
                 activeOpacity={0.7}
+                disabled={submitting}
               >
                 <View
                   style={[
                     styles.radioOuter,
-                    selectedReason === reason && styles.radioOuterSelected,
+                    selectedReason === reason.label && styles.radioOuterSelected,
                   ]}
                 >
-                  {selectedReason === reason && <View style={styles.radioInner} />}
+                  {selectedReason === reason.label && <View style={styles.radioInner} />}
                 </View>
                 <Text
                   style={[
                     styles.reasonText,
-                    selectedReason === reason && styles.reasonTextSelected,
+                    selectedReason === reason.label && styles.reasonTextSelected,
                   ]}
                 >
-                  {reason}
+                  {reason.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -113,14 +150,19 @@ const ReturnRequest: React.FC = () => {
           </View>
 
           <TouchableOpacity
-            style={[styles.submitButton, (!selectedReason || submitting) && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={!selectedReason || submitting}
+            style={[
+              styles.submitButton,
+              (!selectedReason || submitting || !orderId) && styles.submitButtonDisabled,
+            ]}
+            onPress={() => void handleSubmit()}
+            disabled={!selectedReason || submitting || !orderId}
             activeOpacity={0.8}
           >
-            <Text style={styles.submitButtonText}>
-              {submitting ? 'Submitting...' : 'Submit Return Request'}
-            </Text>
+            {submitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitButtonText}>Submit Return Request</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -241,6 +283,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
   },
   submitButtonDisabled: {
     opacity: 0.5,

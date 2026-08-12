@@ -1,9 +1,16 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, Image, TouchableOpacity, ImageSourcePropType } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { RootStackNavigationProp } from '../types/navigation';
 import { bannerIsTapEnabled } from '@/utils/bannerInteraction';
 import { handleRedirect } from '../utils/navigation/linkHandler';
+import {
+  resolveBannerSlideHeight,
+  getBannerAspectRatio,
+  scale,
+  Spacing,
+  useResponsive,
+} from '../utils/responsive';
 
 interface GreensBannerProps {
   image?: ImageSourcePropType;
@@ -13,6 +20,24 @@ interface GreensBannerProps {
 
 export default function GreensBanner({ image, onPress, blockStyle }: GreensBannerProps) {
   const navigation = useNavigation<RootStackNavigationProp>();
+  const { width: screenWidth } = useResponsive();
+  const horizontalPad = Spacing.lg(screenWidth);
+  const bannerWidth = Math.max(0, screenWidth - horizontalPad * 2);
+  const bannerHeight = useMemo(
+    () =>
+      resolveBannerSlideHeight(bannerWidth, {
+        variant: 'promo',
+        blockHeight: blockStyle?.height,
+        screenWidth,
+      }),
+    [bannerWidth, blockStyle?.height, screenWidth],
+  );
+  const aspect =
+    bannerWidth > 0 ? bannerWidth / bannerHeight : getBannerAspectRatio('promo');
+  const borderRadius =
+    blockStyle?.borderRadius != null
+      ? scale(blockStyle.borderRadius, screenWidth)
+      : scale(10, screenWidth);
 
   if (!image) {
     return null;
@@ -29,7 +54,10 @@ export default function GreensBanner({ image, onPress, blockStyle }: GreensBanne
         return;
       }
       if (imgAny.redirectType && imgAny.redirectValue) {
-        handleRedirect({ redirectType: imgAny.redirectType, redirectValue: imgAny.redirectValue }, navigation);
+        handleRedirect(
+          { redirectType: imgAny.redirectType, redirectValue: imgAny.redirectValue },
+          navigation,
+        );
         return;
       }
       if (imgAny.link) {
@@ -37,26 +65,25 @@ export default function GreensBanner({ image, onPress, blockStyle }: GreensBanne
         return;
       }
     }
-    // No link - no-op
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        { paddingHorizontal: horizontalPad, paddingTop: Spacing.section(screenWidth) },
+      ]}
+    >
       <View style={styles.bannerWrapper}>
         <TouchableOpacity
           style={[
             styles.bannerContainer,
-            blockStyle?.height != null && { height: blockStyle.height },
-            blockStyle?.borderRadius != null && { borderRadius: blockStyle.borderRadius },
+            { width: bannerWidth, aspectRatio: aspect, borderRadius },
           ]}
           onPress={handlePress}
           activeOpacity={0.9}
         >
-          <Image
-            source={image}
-            style={styles.bannerImage}
-            resizeMode="stretch"
-          />
+          <Image source={image} style={styles.bannerImage} resizeMode="cover" />
         </TouchableOpacity>
       </View>
     </View>
@@ -65,19 +92,16 @@ export default function GreensBanner({ image, onPress, blockStyle }: GreensBanne
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
-    paddingTop: 32,
     gap: 0,
+    width: '100%',
   },
   bannerWrapper: {
     width: '100%',
     alignItems: 'center',
   },
   bannerContainer: {
-    width: 349,
-    height: 96,
-    borderRadius: 10,
     overflow: 'hidden',
+    backgroundColor: '#EDEDED',
   },
   bannerImage: {
     width: '100%',

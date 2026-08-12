@@ -25,6 +25,7 @@ import {
   TextInput,
   ActivityIndicator,
   FlatList,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -47,6 +48,7 @@ const Coupons: React.FC = () => {
   const [couponCode, setCouponCode] = useState('');
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const fetchCouponsList = useCallback(async () => {
@@ -75,28 +77,66 @@ const Coupons: React.FC = () => {
     void fetchCouponsList();
   }, [fetchCouponsList]);
 
-  const handleApplyCoupon = (codeOverride?: string) => {
+  const handleApplyCoupon = async (codeOverride?: string) => {
     const finalCode = (codeOverride || couponCode).trim().toUpperCase();
-    if (!finalCode) return;
+    if (!finalCode || applying) return;
 
-    const parentNavigation = navigation.getParent();
-    if (parentNavigation) {
-      (parentNavigation as any).navigate('MainTabs', {
-        screen: 'Cart',
-        params: {
-          appliedCoupon: {
-            code: finalCode,
-            discount: 0, // Will be validated and calculated on the Cart screen
-          },
-        },
+    setApplying(true);
+    try {
+      const cartValue = cartItems.reduce(
+        (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
+        0
+      );
+      const result = await couponService.validateCoupon({
+        coupon_code: finalCode,
+        user_id: userKey,
+        cart_items: cartItems.map((item) => ({
+          productId: item.productId,
+          sku_id: (item as { sku?: string }).sku,
+          category: (item as { categoryId?: string }).categoryId,
+          price: item.price,
+          qty: item.quantity,
+          is_on_sale: (item as { isOnSale?: boolean }).isOnSale || false,
+        })),
+        cart_value: cartValue,
+        payment_method: 'ALL',
+        zone: contextLocation?.area || '',
+        delivery_fee: 0,
       });
-    } else {
-      (navigation as any).navigate('Cart', {
-        appliedCoupon: {
-          code: finalCode,
-          discount: 0,
-        },
-      });
+
+      if (!result.success || !result.data?.valid) {
+        const errorCode = result.data?.error_code;
+        let errorMessage = 'Could not apply coupon';
+        if (errorCode === 'INVALID_CODE') errorMessage = "This coupon code doesn't exist";
+        else if (errorCode === 'COUPON_INACTIVE') errorMessage = 'This offer has ended';
+        else if (errorCode === 'COUPON_NOT_VALID_NOW') errorMessage = 'This coupon is not valid right now';
+        else if (result.data?.message) errorMessage = String(result.data.message);
+        Alert.alert('Coupon', errorMessage);
+        return;
+      }
+
+      const applied = {
+        code: finalCode,
+        discount: Number(result.data.discount_amount || 0),
+        displayName: result.data.display_name,
+        isCashback: result.data.is_cashback,
+        cashbackValue: result.data.cashback_value,
+      };
+
+      const parentNavigation = navigation.getParent();
+      if (parentNavigation) {
+        (parentNavigation as any).navigate('MainTabs', {
+          screen: 'Cart',
+          params: { appliedCoupon: applied },
+        });
+      } else {
+        (navigation as any).navigate('Cart', { appliedCoupon: applied });
+      }
+    } catch (err) {
+      logger.warn('Failed to validate coupon before apply', err);
+      Alert.alert('Coupon', 'Unable to validate this coupon. Please try again.');
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -145,11 +185,16 @@ const Coupons: React.FC = () => {
                   autoCapitalize="characters"
                 />
                 <TouchableOpacity
-                  style={styles.applyButton}
-                  onPress={() => handleApplyCoupon()}
+                  style={[styles.applyButton, applying && { opacity: 0.6 }]}
+                  onPress={() => void handleApplyCoupon()}
                   activeOpacity={0.7}
+                  disabled={applying}
                 >
-                  <Text style={styles.applyButtonText}>Apply</Text>
+                  {applying ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.applyButtonText}>Apply</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -179,11 +224,16 @@ const Coupons: React.FC = () => {
                   )}
                 </View>
                 <TouchableOpacity
-                  style={styles.couponApplyButton}
-                  onPress={() => handleApplyCoupon(coupon.code)}
+                  style={[styles.couponApplyButton, applying && { opacity: 0.6 }]}
+                  onPress={() => void handleApplyCoupon(coupon.code)}
+                  disabled={applying}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.couponApplyButtonText}>Apply</Text>
+                  {applying ? (
+                    <ActivityIndicator size="small" color="#034703" />
+                  ) : (
+                    <Text style={styles.couponApplyButtonText}>Apply</Text>
+                  )}
                 </TouchableOpacity>
               </View>
 

@@ -6,7 +6,6 @@ import {
   FlatList,
   Animated,
   TouchableOpacity,
-  useWindowDimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
@@ -16,6 +15,14 @@ import { bannerIsTapEnabled } from '@/utils/bannerInteraction';
 import { handleRedirect } from '../../utils/navigation/linkHandler';
 import type { RootStackNavigationProp } from '../../types/navigation';
 import BannerRemoteImage from '../BannerRemoteImage';
+import {
+  resolveBannerContentFit,
+  resolveBannerSlideHeight,
+  getBannerAspectRatio,
+  scale,
+  Spacing,
+  useResponsive,
+} from '../../utils/responsive';
 
 /** Backend banner shape: { imageUrl, link?, ... }; also accepts ImageSourcePropType */
 export type BannerItem = ImageSourcePropType | { imageUrl: string; link?: string; [k: string]: unknown };
@@ -40,13 +47,14 @@ export default function BannerSection({
     banners && banners.length > 0 ? banners : []
   );
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(false);
   const flatListRef = useRef<FlatList<BannerItem>>(null);
   const autoScrollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const dotAnimationRef = useRef(new Animated.Value(0)).current;
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth } = useResponsive();
+  const horizontalPad = Spacing.lg(windowWidth);
+  const verticalPad = Spacing.xl(windowWidth);
+  const sectionGap = Spacing.md(windowWidth);
 
-  // Sync when banners prop updates (e.g. from home payload)
   useEffect(() => {
     if (banners && banners.length > 0) {
       setBannerImages(banners);
@@ -55,26 +63,23 @@ export default function BannerSection({
     }
   }, [banners, fetchBannerData]);
 
-  /** Full-width slides — must match styles.container paddingHorizontal (16 × 2) exactly for paging. */
-  const slideWidth = useMemo(() => {
-    const horizontalPad = 16 * 2;
-    return Math.max(0, windowWidth - horizontalPad);
-  }, [windowWidth]);
+  /** Full-width slides — must match container padding exactly for paging. */
+  const slideWidth = useMemo(
+    () => Math.max(0, windowWidth - horizontalPad * 2),
+    [windowWidth, horizontalPad],
+  );
+  const dotSize = Math.max(6, scale(8, windowWidth));
+  const activeDotMax = Math.max(12, scale(16, windowWidth));
 
-  // Placeholder for API integration
   useEffect(() => {
     if (fetchBannerData) {
       const loadBanners = async () => {
-        setLoading(true);
         try {
           const data = await fetchBannerData();
           setBannerImages(data);
         } catch (error) {
           logger.error('Error fetching banner data', error);
-          // Fallback to provided banners or dummy data
           setBannerImages(banners ?? []);
-        } finally {
-          setLoading(false);
         }
       };
       loadBanners();
@@ -106,7 +111,6 @@ export default function BannerSection({
     }, 5000);
   }, [bannerImages.length, slideWidth, dotAnimationRef]);
 
-  // Auto-advance on load; cleared on drag, resumed on momentum end
   useEffect(() => {
     if (bannerImages.length <= 1) return;
     scheduleAutoAdvance();
@@ -185,16 +189,34 @@ export default function BannerSection({
     ({ item: banner, index }: { item: BannerItem; index: number }) => {
       const tap = bannerIsTapEnabled(banner);
       const b = banner as any;
-      const contentFit: 'fill' = 'fill';
+      const contentFit = resolveBannerContentFit(b?.contentFit);
       const preferredHeightRaw = Number(b?.dimensions?.preferredHeight);
-      const preferredHeight = Number.isFinite(preferredHeightRaw) && preferredHeightRaw > 0 ? preferredHeightRaw : undefined;
+      const preferredHeight =
+        Number.isFinite(preferredHeightRaw) && preferredHeightRaw > 0
+          ? preferredHeightRaw
+          : undefined;
+      const slideHeight = resolveBannerSlideHeight(slideWidth, {
+        variant: 'secondary',
+        aspectRatio: b?.aspectRatio,
+        preferredHeight,
+        blockHeight: blockStyle?.height,
+        screenWidth: windowWidth,
+      });
+      const borderRadius =
+        blockStyle?.borderRadius != null
+          ? scale(blockStyle.borderRadius, windowWidth)
+          : scale(8, windowWidth);
+      const aspect =
+        slideWidth > 0
+          ? slideWidth / slideHeight
+          : getBannerAspectRatio('secondary', b?.aspectRatio);
       const inner = (
         <BannerRemoteImage
           imageUrl={typeof b?.imageUrl === 'string' ? b.imageUrl : undefined}
           uri={typeof b?.uri === 'string' ? b.uri : undefined}
           title={typeof b?.title === 'string' ? b.title : 'Banner'}
           id={b?._id ?? b?.id ?? index}
-          style={styles.image}
+          style={[styles.image, { borderRadius }]}
           contentFit={contentFit}
           priority={isFirstBannerBlock && index === 0 ? 'high' : 'low'}
           recyclingKey={`banner-${String(b?._id ?? b?.id ?? index)}`}
@@ -202,13 +224,7 @@ export default function BannerSection({
       );
       const boxStyle = [
         styles.imageContainer,
-        { width: slideWidth },
-        (blockStyle?.height != null
-          ? { height: blockStyle.height }
-          : preferredHeight != null
-            ? { height: preferredHeight }
-            : null),
-        blockStyle?.borderRadius != null && { borderRadius: blockStyle.borderRadius },
+        { width: slideWidth, aspectRatio: aspect, borderRadius },
       ];
       if (!tap) {
         return <View style={boxStyle}>{inner}</View>;
@@ -219,7 +235,14 @@ export default function BannerSection({
         </TouchableOpacity>
       );
     },
-    [slideWidth, blockStyle?.height, blockStyle?.borderRadius, handlePress, isFirstBannerBlock]
+    [
+      slideWidth,
+      windowWidth,
+      blockStyle?.height,
+      blockStyle?.borderRadius,
+      handlePress,
+      isFirstBannerBlock,
+    ],
   );
 
   const getItemLayout = useCallback(
@@ -232,8 +255,16 @@ export default function BannerSection({
   );
 
   return (
-    <View style={styles.container}>
-      {/* FlatList: reliable horizontal paging when nested in the home ScrollView */}
+    <View
+      style={[
+        styles.container,
+        {
+          paddingHorizontal: horizontalPad,
+          paddingVertical: verticalPad,
+          gap: sectionGap,
+        },
+      ]}
+    >
       <FlatList
         ref={flatListRef}
         data={bannerImages}
@@ -252,16 +283,16 @@ export default function BannerSection({
         style={[styles.list, { width: slideWidth }]}
         getItemLayout={getItemLayout}
         removeClippedSubviews={false}
+        extraData={slideWidth}
       />
 
-      {/* Dot indicators only when multiple slides (static single banner = no dots) */}
       {bannerImages.length > 1 && (
         <View style={styles.dotsContainer} accessibilityLabel="Banner page indicators">
           {bannerImages.map((_, index) => {
             const isActive = index === currentIndex;
             const animatedWidth = dotAnimationRef.interpolate({
               inputRange: [0, 1],
-              outputRange: [8, 16], // Animate from 8px to 16px
+              outputRange: [dotSize, activeDotMax],
             });
 
             return (
@@ -271,17 +302,12 @@ export default function BannerSection({
                     style={[
                       styles.dot,
                       styles.activeDot,
-                      {
-                        width: animatedWidth,
-                      },
+                      { width: animatedWidth, height: dotSize },
                     ]}
                   />
                 ) : (
                   <View
-                    style={[
-                      styles.dot,
-                      styles.inactiveDot,
-                    ]}
+                    style={[styles.dot, styles.inactiveDot, { width: dotSize, height: dotSize }]}
                   />
                 )}
               </View>
@@ -296,25 +322,20 @@ export default function BannerSection({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    gap: 12,
   },
   list: {
     flexGrow: 0,
     alignSelf: 'center',
   },
   imageContainer: {
-    height: 198, // default; can be overridden per banner by dimensions.preferredHeight
-    borderRadius: 8,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#EDEDED',
   },
   image: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
   },
   dotsContainer: {
     flexDirection: 'row',
@@ -331,13 +352,11 @@ const styles = StyleSheet.create({
   },
   dot: {
     borderRadius: 4,
-    height: 8,
   },
   activeDot: {
     backgroundColor: '#034703',
   },
   inactiveDot: {
-    width: 8,
     backgroundColor: '#BABABA',
   },
 });

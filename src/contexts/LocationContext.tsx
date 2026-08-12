@@ -63,6 +63,8 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Reset in-memory state and reload the active user's saved location whenever
   // the authenticated user changes (login, logout, or account switch). Waits
   // for the session restore to finish so we don't briefly load the guest bucket.
+  // On login, copy guest location into an empty user bucket so delivery context
+  // selected before auth is preserved.
   useEffect(() => {
     if (isRestoring) return;
     let active = true;
@@ -71,6 +73,20 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setServiceable(true);
     (async () => {
       try {
+        if (userKey !== GUEST_KEY) {
+          const existing = await AsyncStorage.getItem(locationKeyFor(userKey));
+          if (!existing) {
+            const guestLoc = await AsyncStorage.getItem(locationKeyFor(GUEST_KEY));
+            if (guestLoc) {
+              await AsyncStorage.setItem(locationKeyFor(userKey), guestLoc);
+              const guestStore = await AsyncStorage.getItem(storeKeyFor(GUEST_KEY));
+              if (guestStore) {
+                await AsyncStorage.setItem(storeKeyFor(userKey), guestStore);
+              }
+            }
+          }
+        }
+
         const stored = await AsyncStorage.getItem(locationKeyFor(userKey));
         if (active && stored) {
           setLocationState(JSON.parse(stored));

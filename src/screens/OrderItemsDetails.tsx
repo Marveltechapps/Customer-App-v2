@@ -98,6 +98,9 @@ const OrderItemsDetails: React.FC = () => {
     itemTotal: routeItemTotal = 0,
     handlingCharge: routeHandlingCharge = defaultHandling,
     createdAt,
+    paymentMethodDisplay,
+    paymentMethodLines,
+    estimatedDeliveryMessage,
   } = params;
 
   // Customer app: force free delivery across the detailed order view.
@@ -358,6 +361,12 @@ const OrderItemsDetails: React.FC = () => {
 
   const renderOrderDetails = () => {
     const orderPlacedDate = formatOrderDate(createdAt);
+    const paymentLines =
+      paymentMethodLines && paymentMethodLines.length > 0
+        ? paymentMethodLines
+        : paymentMethodDisplay
+          ? [{ label: paymentMethodDisplay, amount: null as number | null }]
+          : [];
 
     return (
       <View style={styles.orderDetailsCard}>
@@ -389,6 +398,26 @@ const OrderItemsDetails: React.FC = () => {
               <Text style={styles.orderDetailValue}>{orderPlacedDate}</Text>
             </View>
           </View>
+          {paymentLines.length > 0 && (
+            <View style={styles.orderDetailItem}>
+              <View style={styles.orderDetailLabelContainer}>
+                <Text style={styles.orderDetailLabel}>Payment Method</Text>
+              </View>
+              <View style={styles.orderDetailValueContainer}>
+                {paymentLines.map((line) => {
+                  const text =
+                    line.amount != null && line.amount > 0 && !/\(₹/.test(line.label)
+                      ? `${line.label} (₹${line.amount})`
+                      : line.label;
+                  return (
+                    <Text key={`${line.label}-${line.amount ?? 'x'}`} style={styles.orderDetailValue}>
+                      {text}
+                    </Text>
+                  );
+                })}
+              </View>
+            </View>
+          )}
         </View>
       </View>
     );
@@ -819,6 +848,13 @@ const styles = StyleSheet.create({
     color: '#4E4E4E', // Exact from Figma fill_5O6DMB
     lineHeight: 18, // 1.5em
     includeFontPadding: false,
+  },
+  orderDetailEta: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#1E63D0',
+    lineHeight: 18,
+    marginTop: 4,
   },
   missingSection: {
     backgroundColor: '#FFFFFF',

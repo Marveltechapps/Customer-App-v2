@@ -33,6 +33,9 @@ import { getActiveOrder, type ActiveOrder } from '../services/orders/orderServic
 import { logger } from '@/utils/logger';
 import { getProductImageUrl } from '../utils/productImage';
 import { pollWorldlineStatus, getWorldlineStatus } from '../services/payments/worldlineCheckout';
+import { fetchPaymentRetryStatus } from '../services/payments/paymentRetryService';
+import { useResponsive } from '../utils/responsive';
+import CancelOrderSheet from '../components/order/CancelOrderSheet';
 
 const STATUS_MESSAGES: Record<string, string> = {
   pending: 'Your order has been placed',
@@ -48,6 +51,9 @@ const OrderStatusMain: React.FC = () => {
   const navigation = useNavigation<OrdersStackNavigationProp>();
   const rootNavigation = useNavigation<RootStackNavigationProp>();
   const { location: userLocation, getCurrentLocation } = useLocation();
+  const { width: screenWidth } = useResponsive();
+  const statusImageSize = Math.min(137.32, screenWidth * 0.3);
+  const statusCardGap = Math.max(16, Math.min(67, screenWidth * 0.14));
 
   const [order, setOrder] = useState<ActiveOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,6 +61,7 @@ const OrderStatusMain: React.FC = () => {
   const [isRefreshingPayment, setIsRefreshingPayment] = useState(false);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [riderLocation, setRiderLocation] = useState<{ latitude: number; longitude: number; heading?: number } | null>(null);
+  const [cancelVisible, setCancelVisible] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   const fetchOrder = useCallback(async (showSpinner = false) => {
@@ -97,20 +104,30 @@ const OrderStatusMain: React.FC = () => {
         const status = await getWorldlineStatus(order.id);
         if (status.orderPaymentStatus === 'paid') {
           fetchOrder();
-        } else {
-          Alert.alert('Still Pending', 'Bank has not confirmed your payment yet. Please try again in a few minutes.');
+          return;
         }
-      } else {
-        // Redirect back to payment screen for retry
-        rootNavigation.navigate('Payment', {
-          orderId: order.id,
-          totalBill: order.totalBill,
-          itemCount: order.items.length,
-          addressId: order.deliveryAddress.id,
-        });
       }
+
+      const retry = await fetchPaymentRetryStatus(order.id).catch(() => null);
+      if (retry && !retry.canRetry) {
+        Alert.alert(
+          'Cannot retry payment',
+          retry.reason || 'Please contact support if you were charged.'
+        );
+        return;
+      }
+
+      rootNavigation.navigate('Payment', {
+        orderId: order.id,
+        totalBill: order.totalBill,
+        itemCount: order.items.length,
+        addressId: order.deliveryAddress?.id,
+        autoStartGateway: true,
+        initialPaymentMethod: 'digital',
+      });
     } catch (err) {
       logger.warn('Failed to retry/refresh payment', err);
+      Alert.alert('Payment', 'Unable to start payment retry. Please try again.');
     } finally {
       setIsRefreshingPayment(false);
     }
@@ -142,7 +159,9 @@ const OrderStatusMain: React.FC = () => {
           {isRefreshingPayment ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.paymentBannerActionText}>{isFailed ? 'Retry' : 'Refresh'}</Text>
+            <Text style={styles.paymentBannerActionText}>
+              {isFailed ? 'Retry payment' : 'Complete / Refresh'}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
@@ -264,6 +283,12 @@ const OrderStatusMain: React.FC = () => {
         deliveryFee: activeOrder.deliveryFee,
         totalBill: activeOrder.totalBill,
         createdAt: activeOrder.createdAt,
+        paymentMethodDisplay:
+          (activeOrder as any).paymentMethodDisplay ||
+          (activeOrder as any).paymentMethod?.detailDisplay ||
+          (activeOrder as any).paymentMethod?.display,
+        paymentMethodLines: (activeOrder as any).paymentMethod?.lines,
+        estimatedDeliveryMessage: (activeOrder as any).estimatedDeliveryMessage,
       });
     },
     [navigation],
@@ -362,9 +387,9 @@ const OrderStatusMain: React.FC = () => {
     return (
       <View style={styles.orderCardContainer}>
         {/* Main Status Card */}
-        <View style={styles.statusCard}>
-          <View style={styles.statusImageContainer}>
-            <OrderStatusIcon width={137.32} height={119.27} />
+        <View style={[styles.statusCard, { gap: statusCardGap }]}>
+          <View style={[styles.statusImageContainer, { width: statusImageSize, height: statusImageSize * (119.27 / 137.32) }]}>
+            <OrderStatusIcon width={statusImageSize} height={statusImageSize * (119.27 / 137.32)} />
           </View>
 
           <View style={styles.statusInfoContainer}>
@@ -469,6 +494,20 @@ const OrderStatusMain: React.FC = () => {
               </View>
             </View>
           </TouchableOpacity>
+
+          {!awaitingOnlinePayment &&
+          order.status !== 'delivered' &&
+          order.status !== 'cancelled' &&
+          order.status !== 'on-the-way' &&
+          order.status !== 'arrived' ? (
+            <TouchableOpacity
+              style={styles.cancelOrderBtn}
+              onPress={() => setCancelVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelOrderBtnText}>Cancel order</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     );
@@ -477,6 +516,19 @@ const OrderStatusMain: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Header title="Order status" showBackButton onBackPress={() => rootNavigation.goBack()} />
+
+      {order?.id ? (
+        <CancelOrderSheet
+          visible={cancelVisible}
+          orderId={order.id}
+          onClose={() => setCancelVisible(false)}
+          onCancelled={(message) => {
+            Alert.alert('Order cancelled', message);
+            navigation.navigate('OrderCanceledDetails', { orderId: order.id });
+            setOrder(null);
+          }}
+        />
+      ) : null}
 
       <ScrollView
         style={styles.scrollView}
@@ -575,11 +627,8 @@ const styles = StyleSheet.create({
     borderColor: '#F4F4F4',
     padding: 20,
     paddingHorizontal: 16,
-    gap: 67,
   },
   statusImageContainer: {
-    width: 137.32,
-    height: 119.27,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -788,6 +837,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  cancelOrderBtn: {
+    marginTop: 4,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#ED0004',
+    backgroundColor: '#FFF',
+  },
+  cancelOrderBtnText: {
+    color: '#ED0004',
+    fontSize: 15,
+    fontWeight: '600',
   },
   mapErrorContainer: {
     width: '100%',

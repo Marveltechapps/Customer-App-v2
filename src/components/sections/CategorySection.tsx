@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { RootStackNavigationProp } from '../../types/navigation';
@@ -7,6 +7,7 @@ import Text from '../common/Text';
 import CategoryCard from '../CategoryCard';
 import handleHomeLink from '../../utils/navigation/linkHandler';
 import { getProductImageSource, getProductImageUrl } from '../../utils/productImage';
+import { getGridMetrics, scaleFont, Spacing, useResponsive } from '../../utils/responsive';
 
 interface Category {
   id: string;
@@ -19,37 +20,35 @@ interface Category {
 interface CategorySectionProps {
   title?: string;
   onCategoryPress?: (categoryId: string) => void;
-  categories?: Category[]; // optional external categories from backend
+  categories?: Category[];
   blockStyle?: { columns?: number };
   /** When true, category tiles use high network/decode priority (first grid on home). */
   highImagePriority?: boolean;
 }
 
-export default function CategorySection({ title, onCategoryPress, categories: externalCategories, blockStyle, highImagePriority }: CategorySectionProps) {
+export default function CategorySection({
+  title,
+  onCategoryPress,
+  categories: externalCategories,
+  blockStyle,
+  highImagePriority,
+}: CategorySectionProps) {
   const navigation = useNavigation<RootStackNavigationProp>();
-  const { width: screenWidth } = useWindowDimensions();
-  // Grocery category grids use at least 3 per row (e.g. Flour & Masala). CMS may still send columns: 2.
-  const requestedCols = blockStyle?.columns;
-  const columns =
-    requestedCols && requestedCols >= 2 && requestedCols <= 5
-      ? Math.max(requestedCols, 3)
-      : 3;
+  const { width: screenWidth } = useResponsive();
+
   const sourceCategories = useMemo(() => {
     const raw = externalCategories ?? [];
     return raw.map((c) => {
-      // If caller already provided a static require(), keep as-is.
       const img = c?.image as any;
       const isStatic = typeof img === 'number';
       if (isStatic) return c;
 
-      // If caller provided a valid http(s) uri already, keep as-is.
       const existingUri =
         typeof img === 'object' && img && !Array.isArray(img) && typeof img.uri === 'string'
           ? img.uri.trim()
           : null;
       if (existingUri && /^https?:\/\//i.test(existingUri)) return c;
 
-      // Otherwise normalize whatever shape into a safe absolute URL.
       const normalizedUri = getProductImageUrl({
         id: c?.id,
         name: c?.name,
@@ -61,22 +60,47 @@ export default function CategorySection({ title, onCategoryPress, categories: ex
         image: img,
       });
 
-      return { ...c, image: getProductImageSource({ id: c?.id, name: c?.name, imageUrl: normalizedUri }) };
+      return {
+        ...c,
+        image: getProductImageSource({ id: c?.id, name: c?.name, imageUrl: normalizedUri }),
+      };
     });
   }, [externalCategories]);
-  const effectiveColumns = Math.max(1, Math.min(columns, sourceCategories.length || columns));
-  const horizontalPadding = 16 * 2;
-  const cardGap = 12;
+
+  const grid = useMemo(() => {
+    // Dynamic columns by breakpoint; CMS columns only floor phone layouts
+    const requested = blockStyle?.columns;
+    if (requested && requested >= 2 && requested <= 7 && screenWidth < 768) {
+      return getGridMetrics(screenWidth, {
+        columns: Math.max(requested, 3),
+        gap: 12,
+        horizontalPadding: 16,
+      });
+    }
+    return getGridMetrics(screenWidth, {
+      gap: 12,
+      horizontalPadding: 16,
+      preferredCardWidth: 110,
+    });
+  }, [screenWidth, blockStyle?.columns]);
+
+  const effectiveColumns = Math.max(
+    1,
+    Math.min(grid.columns, sourceCategories.length || grid.columns),
+  );
 
   const cardWidth = useMemo(() => {
-    const available = Math.max(200, screenWidth - horizontalPadding - cardGap * Math.max(0, effectiveColumns - 1));
-    const computed = Math.floor(available / effectiveColumns);
-    return Math.max(96, Math.min(140, computed));
-  }, [screenWidth, effectiveColumns]);
-  const rowCount = Math.max(1, Math.ceil(sourceCategories.length / columns));
-  const dynamicPaddingVertical = rowCount <= 1 ? 12 : 20;
-  const dynamicContainerGap = rowCount <= 1 ? 12 : 16;
-  const dynamicCategoriesGap = rowCount <= 1 ? 12 : 16;
+    const available =
+      screenWidth - grid.horizontalPadding * 2 - grid.gap * Math.max(0, effectiveColumns - 1);
+    return Math.floor(Math.max(72, available / effectiveColumns));
+  }, [screenWidth, grid.horizontalPadding, grid.gap, effectiveColumns]);
+
+  const rowCount = Math.max(1, Math.ceil(sourceCategories.length / effectiveColumns));
+  const dynamicPaddingVertical = rowCount <= 1 ? Spacing.md() : Spacing.xl();
+  const dynamicContainerGap = rowCount <= 1 ? Spacing.md() : Spacing.lg();
+  const dynamicCategoriesGap = rowCount <= 1 ? Spacing.md() : Spacing.lg();
+  const titleFontSize = scaleFont(16, 14, 18);
+  const titleLineHeight = Math.round(titleFontSize * 1.5);
 
   const handleCategoryPress = (categoryId: string) => {
     try {
@@ -99,17 +123,27 @@ export default function CategorySection({ title, onCategoryPress, categories: ex
     }
   };
 
-  // Group categories into rows
   const rows: Category[][] = [];
-  for (let i = 0; i < sourceCategories.length; i += columns) {
-    rows.push(sourceCategories.slice(i, i + columns));
+  for (let i = 0; i < sourceCategories.length; i += effectiveColumns) {
+    rows.push(sourceCategories.slice(i, i + effectiveColumns));
   }
 
   return (
-    <View style={[styles.container, { paddingVertical: dynamicPaddingVertical, gap: dynamicContainerGap }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingHorizontal: grid.horizontalPadding,
+          paddingVertical: dynamicPaddingVertical,
+          gap: dynamicContainerGap,
+        },
+      ]}
+    >
       <View style={styles.headerContainer}>
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>{title}</Text>
+          <Text style={[styles.title, { fontSize: titleFontSize, lineHeight: titleLineHeight }]}>
+            {title}
+          </Text>
         </View>
         <View style={styles.dividerContainer}>
           <LinearGradient
@@ -123,7 +157,7 @@ export default function CategorySection({ title, onCategoryPress, categories: ex
 
       <View style={[styles.categoriesContainer, { gap: dynamicCategoriesGap }]}>
         {rows.map((row, rowIndex) => (
-          <View key={rowIndex} style={[styles.row, { gap: cardGap }]}>
+          <View key={rowIndex} style={[styles.row, { gap: grid.gap }]}>
             {row.map((category) => (
               <CategoryCard
                 key={category.id}
@@ -135,6 +169,11 @@ export default function CategorySection({ title, onCategoryPress, categories: ex
                 imageRecyclingKey={`category-${category.id}`}
               />
             ))}
+            {/* Equal-width spacers so partial rows stay aligned */}
+            {row.length < effectiveColumns &&
+              Array.from({ length: effectiveColumns - row.length }).map((_, index) => (
+                <View key={`spacer-${rowIndex}-${index}`} style={{ width: cardWidth }} />
+              ))}
           </View>
         ))}
       </View>
@@ -144,46 +183,46 @@ export default function CategorySection({ title, onCategoryPress, categories: ex
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
+    width: '100%',
   },
   headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'stretch',
-    gap: 10, // Matches Figma
+    gap: 10,
   },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    flexShrink: 0,
+    flexShrink: 1,
+    maxWidth: '55%',
   },
   dividerContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'stretch',
     height: 1,
+    minWidth: 24,
   },
   divider: {
-    width: 214, // Fixed width from Figma
+    width: '100%',
     height: 1,
   },
   title: {
     fontFamily: 'Inter',
-    fontSize: 16,
-    fontWeight: '500', // Changed from '600' to '500' to match Figma
-    lineHeight: 24, // 1.5em = 24px
+    fontWeight: '500',
     color: '#222222',
     textAlign: 'left',
     textAlignVertical: 'center',
   },
   categoriesContainer: {
-    gap: 16, // Overridden dynamically for compact/1-row layouts
+    width: '100%',
   },
   row: {
     flexDirection: 'row',
     alignSelf: 'stretch',
     justifyContent: 'flex-start',
+    width: '100%',
   },
 });
-

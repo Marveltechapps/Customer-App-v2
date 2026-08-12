@@ -16,6 +16,7 @@ export interface CheckoutConfig {
   minOrderAmount: number;
   tipAmounts: number[];
   deliveryInstructions?: string[];
+  cancelReasons?: string[];
   emptyCartTitle?: string;
   emptyCartDescription?: string;
   emptyCartCta?: string;
@@ -27,6 +28,7 @@ export interface PaymentMethodConfig {
   label: string;
   description: string;
   icon?: string;
+  imageUrl?: string;
   isActive: boolean;
   order: number;
 }
@@ -43,6 +45,21 @@ export interface SupportCategoryConfig {
 export interface AppConfigData {
   checkout?: CheckoutConfig;
   paymentMethods?: PaymentMethodConfig[];
+  featureFlags?: {
+    enableWallet?: boolean;
+    enableCoupons?: boolean;
+    enableChat?: boolean;
+    enableReferral?: boolean;
+    enableRatings?: boolean;
+    enableNotifications?: boolean;
+    maxCartItems?: number;
+    showSkipButtonOnLogin?: boolean;
+  };
+  wallet?: {
+    topUpAmounts?: number[];
+    maxTopUpAmount?: number;
+    imageUrl?: string;
+  };
   support?: { contactPhone?: string; contactEmail?: string };
   payment?: {
     upiMerchantId?: string;
@@ -72,16 +89,26 @@ const DEFAULT_APP_CONFIG: AppConfigData = {
     deliveryInstructions: ['No Contact Delivery', "Don't ring the bell", 'Pet at home'],
   },
   paymentMethods: [
-    { key: 'cash', label: 'Cash on Delivery', description: 'Pay when your order arrives', isActive: true, order: 0 },
+    {
+      key: 'wallet',
+      label: 'Selorg Wallet',
+      description: 'Pay with your Selorg Wallet balance',
+      icon: 'wallet',
+      isActive: true,
+      order: 0,
+    },
+    { key: 'cash', label: 'Cash on Delivery', description: 'Pay when your order arrives', isActive: true, order: 1 },
     {
       key: 'digital',
       label: 'Digital Payment',
       description: 'Card, UPI, net banking, and wallets via Worldline',
       isActive: true,
-      order: 1,
+      order: 2,
     },
   ],
-  support: { contactPhone: '+919999999999', contactEmail: 'support@selorg.com' },
+  featureFlags: { enableWallet: true },
+  wallet: { topUpAmounts: [100, 250, 500], maxTopUpAmount: 10000 },
+  support: { contactPhone: '+919444183378', contactEmail: 'support@selorg.com' },
   payment: { upiMerchantId: 'merchant@upi', upiMerchantName: 'SelOrg' },
   images: { placeholderUrl: 'https://placehold.co/200x200?text=No+Image' },
   supportCategories: [],
@@ -133,21 +160,27 @@ export const AppConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           setIsLoading(true);
         }
         setError(null);
-        const res = await api.get<{ success: boolean; data: AppConfigData }>(endpoints.appConfig);
+        const res = await api.get<AppConfigData>(endpoints.appConfig);
         if (res?.success && res?.data) {
-          const d = res.data;
-          const merged = {
+          const d = res.data as AppConfigData;
+          const merged: AppConfigData = {
             ...DEFAULT_APP_CONFIG,
             ...d,
-            checkout: { ...DEFAULT_APP_CONFIG.checkout, ...d?.checkout },
-            support: { ...DEFAULT_APP_CONFIG.support, ...d?.support },
-            payment: { ...DEFAULT_APP_CONFIG.payment, ...d?.payment },
-            images: { ...DEFAULT_APP_CONFIG.images, ...d?.images },
+            checkout: { ...DEFAULT_APP_CONFIG.checkout!, ...d.checkout },
+            support: { ...DEFAULT_APP_CONFIG.support, ...d.support },
+            payment: { ...DEFAULT_APP_CONFIG.payment, ...d.payment },
+            images: { ...DEFAULT_APP_CONFIG.images, ...d.images },
+            featureFlags: { ...DEFAULT_APP_CONFIG.featureFlags, ...d.featureFlags },
+            wallet: { ...DEFAULT_APP_CONFIG.wallet, ...d.wallet },
+            paymentMethods:
+              Array.isArray(d.paymentMethods) && d.paymentMethods.length > 0
+                ? d.paymentMethods
+                : DEFAULT_APP_CONFIG.paymentMethods,
           };
           // Ensure customer app always shows/uses free delivery.
           // (Backend pricing may still calculate fees separately; this is a UI/config override.)
-          merged.checkout.deliveryFee = 0;
-          setAppConfigState(merged);
+          if (merged.checkout) merged.checkout.deliveryFee = 0;
+          setAppConfigState(merged as AppConfigData);
           setPlaceholderUrls(merged.images);
           lastFetchAtRef.current = Date.now();
           logger.info('[app-config-perf] fetch success', {
@@ -185,13 +218,19 @@ export const AppConfigProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const merged = {
         ...DEFAULT_APP_CONFIG,
         ...config,
-        checkout: { ...DEFAULT_APP_CONFIG.checkout, ...config?.checkout },
-        support: { ...DEFAULT_APP_CONFIG.support, ...config?.support },
-        payment: { ...DEFAULT_APP_CONFIG.payment, ...config?.payment },
-        images: { ...DEFAULT_APP_CONFIG.images, ...config?.images },
-      };
+        checkout: { ...DEFAULT_APP_CONFIG.checkout!, ...config.checkout },
+        support: { ...DEFAULT_APP_CONFIG.support, ...config.support },
+        payment: { ...DEFAULT_APP_CONFIG.payment, ...config.payment },
+        images: { ...DEFAULT_APP_CONFIG.images, ...config.images },
+        featureFlags: { ...DEFAULT_APP_CONFIG.featureFlags, ...config.featureFlags },
+        wallet: { ...DEFAULT_APP_CONFIG.wallet, ...config.wallet },
+        paymentMethods:
+          Array.isArray(config.paymentMethods) && config.paymentMethods.length > 0
+            ? config.paymentMethods
+            : DEFAULT_APP_CONFIG.paymentMethods,
+      } as AppConfigData;
       // Ensure customer app always shows/uses free delivery.
-      merged.checkout.deliveryFee = 0;
+      if (merged.checkout) merged.checkout.deliveryFee = 0;
       setAppConfigState(merged);
       setPlaceholderUrls(merged.images);
     }

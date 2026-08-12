@@ -16,7 +16,7 @@ ENV['RCT_NEW_ARCH_ENABLED'] ||= '0' if podfile_properties['newArchEnabled'] == '
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
 ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
 ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
-platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
+platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1' # Expo SDK 54 / RN 0.81 minimum
 
 prepare_react_native_project!
 
@@ -62,5 +62,14 @@ target 'Selorg' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    # Fail fast if React Native Firebase Messaging did not autolink (required for iOS FCM).
+    installed = installer.pods_project.targets.map(&:name)
+    required_firebase_pods = %w[RNFBApp RNFBMessaging FirebaseMessaging FirebaseCore]
+    missing = required_firebase_pods.reject { |name| installed.include?(name) || installed.any? { |t| t.include?(name) } }
+    unless missing.empty?
+      raise "[Selorg] Missing Firebase/RNFB CocoaPods after install: #{missing.join(', ')}. Ensure @react-native-firebase/app + messaging are in package.json, then re-run pod install."
+    end
+    Pod::UI.puts "[Selorg] Firebase/RNFB pods OK: #{required_firebase_pods.join(', ')}"
   end
 end

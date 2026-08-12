@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet, Text, Image, ImageSourcePropType } from 'react-native';
-import { scale, getSpacing } from '../../utils/responsive';
+import { scaleFont, Spacing, useResponsive } from '../../utils/responsive';
 
 interface OrganicTaglineSectionProps {
   icon?: ImageSourcePropType;
@@ -8,55 +8,54 @@ interface OrganicTaglineSectionProps {
 }
 
 export default function OrganicTaglineSection({ icon, tagline }: OrganicTaglineSectionProps) {
+  const { width: screenWidth, spacing } = useResponsive();
+
+  const layout = useMemo(() => {
+    const horizontalPad = Spacing.lg();
+    const contentWidth = Math.max(0, screenWidth - horizontalPad * 2);
+    const fontSize = scaleFont(36, 28, 42);
+    const lineHeight = Math.round(fontSize * 1.33);
+    const iconWidth = Math.max(18, spacing(23));
+    const iconHeight = Math.max(16, spacing(20));
+    return {
+      horizontalPad,
+      contentWidth,
+      fontSize,
+      lineHeight,
+      iconWidth,
+      iconHeight,
+      minHeight: Math.max(lineHeight * 2, spacing(96)),
+    };
+  }, [screenWidth, spacing]);
+
   if (!tagline) {
     return null;
   }
-  // Responsive dimensions
-  const responsiveDimensions = useMemo(() => {
-    const containerPadding = getSpacing(16) * 2; // 16px on each side
-    const baseContentWidth = 350; // Base design width
-    const contentWidth = Math.min(scale(baseContentWidth), scale(375) - containerPadding);
-    const iconWidth = scale(22.92);
-    const iconHeight = scale(20.04);
-    
-    // Icon position: 304px from left in 350px container (from Figma)
-    // Scale proportionally for different screen widths
-    const iconLeft = (304 / 350) * contentWidth;
-    const iconTop = scale(66.96);
-    
-    return {
-      contentWidth,
-      iconWidth,
-      iconHeight,
-      iconLeft,
-      iconTop,
-    };
-  }, []);
-
-  const { contentWidth, iconWidth, iconHeight, iconLeft, iconTop } = responsiveDimensions;
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.contentContainer, { width: contentWidth }]}>
-        {/* Tagline Text */}
-        <Text style={styles.taglineText}>{tagline}</Text>
-        
-        {/* Icon positioned absolutely */}
-        <View
+    <View style={[styles.container, { paddingHorizontal: layout.horizontalPad }]}>
+      <View style={[styles.contentContainer, { minHeight: layout.minHeight }]}>
+        <Text
           style={[
-            styles.iconContainer,
-            {
-              left: iconLeft,
-              top: iconTop,
-              width: iconWidth,
-              height: iconHeight,
-            },
+            styles.taglineText,
+            { fontSize: layout.fontSize, lineHeight: layout.lineHeight },
           ]}
         >
-          {icon ? (
-          <Image source={icon} style={styles.icon} resizeMode="contain" />
+          {tagline}
+        </Text>
+        {icon ? (
+          <View
+            style={[
+              styles.iconContainer,
+              {
+                width: layout.iconWidth,
+                height: layout.iconHeight,
+              },
+            ]}
+          >
+            <Image source={icon} style={styles.icon} resizeMode="contain" />
+          </View>
         ) : null}
-        </View>
       </View>
     </View>
   );
@@ -65,29 +64,29 @@ export default function OrganicTaglineSection({ icon, tagline }: OrganicTaglineS
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 0, // Remove bottom padding
-    gap: 12,
+    paddingTop: Spacing.xl(),
+    paddingBottom: 0,
+    gap: Spacing.md(),
     backgroundColor: '#F5f5f5',
   },
   contentContainer: {
+    width: '100%',
     position: 'relative',
-    height: 96,
     justifyContent: 'center',
     alignItems: 'flex-start',
   },
   taglineText: {
-    fontFamily: 'Inter', // Using Inter instead of Segoe UI for consistency
-    fontSize: 36,
+    fontFamily: 'Inter',
     fontWeight: '700',
-    lineHeight: 48, // 1.333 * 36
     color: '#ACACAC',
     textAlign: 'left',
     width: '100%',
+    paddingRight: 28,
   },
   iconContainer: {
     position: 'absolute',
+    right: 0,
+    bottom: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -96,4 +95,3 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 });
-

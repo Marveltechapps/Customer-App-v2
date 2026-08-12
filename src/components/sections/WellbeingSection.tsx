@@ -7,6 +7,7 @@ import Text from '../common/Text';
 import WellbeingCard, { WellbeingProduct } from '../WellbeingCard';
 import { logger } from '@/utils/logger';
 import handleHomeLink from '../../utils/navigation/linkHandler';
+import { scaleFont } from '../../utils/responsive';
 
 interface WellbeingSectionProps {
   onProductPress?: (productId: string) => void;
@@ -139,8 +140,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9D9F3',
   },
   headerContainer: {
-    width: 295,
-    height: 64,
+    width: '100%',
+    maxWidth: 480,
+    minHeight: 64,
     alignItems: 'center',
     justifyContent: 'flex-start',
     position: 'relative',
@@ -148,27 +150,28 @@ const styles = StyleSheet.create({
   subtitleContainer: {
     alignItems: 'center',
     gap: 8,
-    width: 295,
+    width: '100%',
     marginTop: 11,
   },
   starsContainer: {
-    width: 270,
-    height: 35,
+    width: '90%',
+    maxWidth: 360,
+    aspectRatio: 270 / 35,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'absolute',
     top: 0,
-    left: 13,
+    alignSelf: 'center',
   },
   starsImage: {
-    width: 270,
-    height: 35,
+    width: '100%',
+    height: '100%',
   },
   title: {
     fontFamily: 'Inter',
-    fontSize: 20,
+    fontSize: scaleFont(20, 18, 24),
     fontWeight: '700',
-    lineHeight: 24.2,
+    lineHeight: scaleFont(24.2, 22, 29),
     color: '#000000',
     textAlign: 'center',
   },
@@ -179,10 +182,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dividerLine: {
-    width: 77,
     height: 1,
     flex: 1,
-    maxWidth: 77,
   },
   tagContainer: {
     flexDirection: 'row',
@@ -190,16 +191,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#B6319E',
     borderRadius: 50,
-    paddingVertical: 0,
+    paddingVertical: 2,
     paddingHorizontal: 10,
-    width: 108,
-    height: 21,
+    minHeight: 21,
   },
   tagText: {
     fontFamily: 'Inter',
-    fontSize: 12,
+    fontSize: scaleFont(12, 11, 14),
     fontWeight: '600',
-    lineHeight: 14.52,
+    lineHeight: scaleFont(14.52, 13, 17),
     color: '#FFFFFF',
     textAlign: 'center',
     includeFontPadding: false,
@@ -212,13 +212,16 @@ const styles = StyleSheet.create({
   productRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 24,
+    gap: 16,
     width: '100%',
     marginBottom: 0,
     justifyContent: 'center',
+    flexWrap: 'wrap',
   },
   spacer: {
-    width: 155,
+    flex: 1,
+    minWidth: 120,
+    maxWidth: 220,
   },
 });
 

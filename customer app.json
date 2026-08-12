@@ -1,0 +1,139 @@
+{
+    "play_store_listing": {
+      "name": "Selorg",
+      "title": "Selorg - Organic Grocery",
+      "short_description": "India's first lab-tested organic grocery app. Clean food, delivered.",
+      "full_description": "Avoid poison on your plate.\n\nSelorg is India's first lab-tested organic grocery app — your health guardian for clean, toxin-free food delivered to your door.\n\nWHY SELORG?\n• Lab-tested organic groceries you can trust\n• Clean, healthy food for your family\n• Toxin-free products curated for everyday cooking\n• Fast delivery to your saved addresses\n\nSHOP WITH EASE\n• Browse categories, collections, and deals\n• Search products quickly\n• Add to cart and checkout in minutes\n• Apply coupons and offers\n• Pay securely via UPI and supported wallets (PhonePe, GPay, Paytm & more)\n\nTRACK & MANAGE ORDERS\n• Real-time order status updates\n• Delivery address management with maps\n• Order history, ratings & feedback\n• Easy returns and refund requests\n• In-app wallet for seamless payments\n\nMADE FOR FAMILIES\n• Tiny Tummies — specially curated picks for little ones\n• Push notifications for order updates\n• Customer support chat and tickets\n\nLogin with OTP, set your delivery location, and begin your clean food journey with Selorg.\n\nWe're your health guardian.",
+      "key_description": [
+        "India's first lab-tested organic grocery shopping app",
+        "Clean, toxin-free groceries for the whole family",
+        "Browse categories, search products, deals & Tiny Tummies",
+        "Secure OTP login and address-based delivery",
+        "Cart, coupons, wallet & UPI payments",
+        "Live order tracking, refunds, ratings & in-app support"
+      ],
+      "whats_new": "Initial Play Store release — shop lab-tested organic groceries, track orders, and pay securely with UPI.",
+      "promo_text": "Clean food. Lab-tested. Delivered. Begin your clean food journey with Selorg."
+    },
+  
+    "app_identity": {
+      "display_name": "Selorg",
+      "package_name": "com.selorg.com",
+      "application_id": "com.selorg.com",
+      "ios_bundle_id": "com.selorg.com",
+      "version_name": "0.0.3",
+      "version_code": 2,
+      "expo_slug": "frontend",
+      "min_sdk": 24,
+      "target_sdk": 36,
+      "orientation": "portrait",
+      "default_language": "en-IN"
+    },
+  
+    "category_and_tags": {
+      "category": "Shopping",
+      "tags": [
+        "organic grocery",
+        "lab-tested food",
+        "healthy grocery delivery",
+        "toxin-free",
+        "online supermarket",
+        "UPI grocery"
+      ],
+      "content_rating": "Everyone",
+      "target_audience": "Families and health-conscious grocery shoppers in India"
+    },
+  
+    "contact_and_legal": {
+      "developer_name": "Selorg",
+      "website": "https://selorg.com",
+      "support_email": "support@selorg.com",
+      "support_phone": "+919444183378",
+      "privacy_policy_url": "https://selorg.com/privacy",
+      "terms_url": "https://selorg.com/terms",
+      "note": "Replace privacy/terms URLs with your live public pages (required by Play Console). In-app content is also loaded from API legal endpoints."
+    },
+  
+    "branding": {
+      "primary_color": "#034703",
+      "icon_asset": "assets/selorg-logo.png",
+      "splash_asset": "assets/splash.png",
+      "tagline": "India's first lab-tested organic grocery app",
+      "hero_line": "Avoid poison on your plate"
+    },
+  
+    "permissions_declared": [
+      {
+        "permission": "ACCESS_FINE_LOCATION",
+        "reason": "Show delivery route and pin delivery address on map"
+      },
+      {
+        "permission": "ACCESS_COARSE_LOCATION",
+        "reason": "Approximate location for delivery address setup"
+      },
+      {
+        "permission": "POST_NOTIFICATIONS",
+        "reason": "Order status and delivery updates (via expo-notifications)"
+      },
+      {
+        "permission": "INTERNET",
+        "reason": "API, catalog, payments, and order sync"
+      }
+    ],
+  
+    "core_features": [
+      "Onboarding + OTP login",
+      "Home, categories, search, product detail",
+      "Cart & checkout",
+      "Coupons & wallet",
+      "Worldline/Paynimo UPI payments",
+      "Saved addresses + Google Maps",
+      "Order tracking, cancel, rate",
+      "Returns & refunds",
+      "Customer support chat/tickets",
+      "Tiny Tummies kids grocery section",
+      "Privacy Policy & Terms in-app"
+    ],
+  
+    "technical_credentials_for_play_console": {
+      "signing": {
+        "keystore_file_present_in_repo": "my-release-key.jks",
+        "warning": "Do not upload keystore passwords or .jks into public docs. Keep in Play App Signing / secure vault only.",
+        "fields_you_must_fill_privately": {
+          "keystore_password": "<YOUR_KEYSTORE_PASSWORD>",
+          "key_alias": "<YOUR_KEY_ALIAS>",
+          "key_password": "<YOUR_KEY_PASSWORD>"
+        }
+      },
+      "apis_and_services": {
+        "production_api_base_url": "https://api.selorg.com/api/v1/customer",
+        "payment_api_base_url": "https://api.selorg.com",
+        "google_maps_api_key": "<FROM_GOOGLE_CLOUD_CONSOLE>",
+        "eas_project_id": "<FROM_eas_init>",
+        "payment_mode": "gateway"
+      },
+      "play_console_account": {
+        "developer_account_email": "<YOUR_PLAY_CONSOLE_EMAIL>",
+        "app_access_login_for_reviewers": {
+          "phone_or_email": "<TEST_ACCOUNT>",
+          "otp_or_password": "<TEST_CREDENTIALS>",
+          "notes": "Provide a demo OTP/login path so Google reviewers can access the app"
+        }
+      }
+    },
+  
+    "store_assets_checklist": {
+      "app_icon_512x512": "required",
+      "feature_graphic_1024x500": "required",
+      "phone_screenshots_min_2": "required (home, categories, product, cart, order tracking recommended)",
+      "short_description_max_chars": 80,
+      "full_description_max_chars": 4000,
+      "title_max_chars": 30
+    },
+  
+    "character_counts": {
+      "title": 24,
+      "short_description": 72,
+      "full_description_approx": 1450
+    }
+  }

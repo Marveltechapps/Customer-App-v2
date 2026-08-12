@@ -13,7 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, CommonActions } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { useLocation, LocationData } from '../contexts/LocationContext';
@@ -24,6 +24,7 @@ import { logger } from '@/utils/logger';
 import { navigationFlags } from '../utils/navigationFlags';
 import { notifyAddressesChanged } from '../utils/addressRefresh';
 import { addressToLocationData } from '../utils/addressLocationSync';
+import { completePostAuthNavigation } from '../navigation/authNavigation';
 
 type LocationPermissionRouteProp = RouteProp<RootStackParamList, 'LocationPermission'>;
 
@@ -34,6 +35,7 @@ const LocationPermission: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<LocationPermissionRouteProp>();
   const fromAuth = route.params?.fromAuth ?? false;
+  const returnTo = route.params?.returnTo;
   const { width } = useDimensions();
   const { requestLocationPermission, getCurrentLocation, loading, setLocation } = useLocation();
 
@@ -133,7 +135,7 @@ const LocationPermission: React.FC = () => {
   const navigateForward = useCallback(() => {
     navigationFlags.skipLocationDrawer = true;
     if (fromAuth) {
-      navigation.replace('MainTabs');
+      completePostAuthNavigation(navigation, { returnTo });
     } else {
       if (navigation.canGoBack()) {
         navigation.goBack();
@@ -141,7 +143,27 @@ const LocationPermission: React.FC = () => {
         navigation.navigate('MainTabs');
       }
     }
-  }, [fromAuth, navigation]);
+  }, [fromAuth, navigation, returnTo]);
+
+  /** Search / enter address without requesting OS location permission. */
+  const handleSearchOrEnterAddress = useCallback(() => {
+    navigationFlags.skipLocationDrawer = true;
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 1,
+        routes: [
+          { name: 'MainTabs' },
+          {
+            name: 'Addresses',
+            state: {
+              routes: [{ name: 'LocationSearch' }],
+              index: 0,
+            },
+          },
+        ],
+      }),
+    );
+  }, [navigation]);
 
   const transitionToMap = useCallback((loc: LocationData) => {
     setMapLocation(loc);
@@ -487,10 +509,21 @@ const LocationPermission: React.FC = () => {
             {loading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={[styles.buttonText, responsiveStyles.buttonText]}>Enable Location</Text>
+              <Text style={[styles.buttonText, responsiveStyles.buttonText]}>Use Current Location</Text>
             )}
           </TouchableOpacity>
         )}
+
+        <TouchableOpacity
+          style={[styles.secondaryButton, { paddingVertical: responsiveStyles.buttonPadding, borderRadius: responsiveStyles.buttonRadius }]}
+          onPress={handleSearchOrEnterAddress}
+          disabled={loading}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.secondaryButtonText, responsiveStyles.buttonText]}>
+            Search or enter address
+          </Text>
+        </TouchableOpacity>
 
       </Animated.View>
     </SafeAreaView>
@@ -596,6 +629,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '500',
     color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  secondaryButton: {
+    marginTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#034703',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    fontFamily: 'Inter',
+    fontWeight: '500',
+    color: '#034703',
     textAlign: 'center',
   },
   // --- Map confirmation styles ---

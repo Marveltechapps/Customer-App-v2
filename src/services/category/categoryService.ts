@@ -6,6 +6,11 @@ export interface CategoryPayloadCategory {
   name: string;
   slug: string;
   imageUrl: string | null;
+  thumbnailUrl?: string | null;
+  cardImageUrl?: string | null;
+  bannerImage?: string | null;
+  bannerVideo?: string | null;
+  youtubeUrl?: string | null;
 }
 
 export interface CategoryPayloadSubCategory {
@@ -15,11 +20,15 @@ export interface CategoryPayloadSubCategory {
   imageUrl: string | null;
   thumbnailUrl?: string | null;
   cardImageUrl?: string | null;
+  bannerImage?: string | null;
+  bannerVideo?: string | null;
+  youtubeUrl?: string | null;
 }
 
 export interface CategoryPayloadBanner {
   id: string;
   imageUrl: string;
+  videoUrl?: string | null;
   link: string | null;
   redirectType?: string | null;
   redirectValue?: string | null;
@@ -50,6 +59,7 @@ export interface CategoryPayloadProduct {
   discount?: string;
   quantity: string;
   variants: CategoryPayloadProductVariant[];
+  maxOrderLimit?: number | null;
 }
 
 export interface CategoryPayloadData {

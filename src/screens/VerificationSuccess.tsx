@@ -13,6 +13,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { RootStackNavigationProp, RootStackParamList } from '../types/navigation';
 import Text from '../components/common/Text';
 import VerificationCheckIcon from '../components/icons/VerificationCheckIcon';
+import { completePostAuthNavigation } from '../navigation/authNavigation';
 
 type VerificationSuccessRouteProp = RouteProp<RootStackParamList, 'VerificationSuccess'>;
 
@@ -82,10 +83,13 @@ const VerificationSuccess: React.FC = () => {
     textAnimation.start();
 
     const navigationTimer = setTimeout(() => {
-      navigation.replace('LocationPermission', { fromAuth: true });
+      completePostAuthNavigation(navigation, {
+        returnTo: route.params?.returnTo,
+        needsLocation: true,
+      });
     }, 1500);
     return () => clearTimeout(navigationTimer);
-  }, [navigation]);
+  }, [navigation, route.params?.returnTo]);
 
   return (
     <View style={styles.container}>

@@ -120,14 +120,15 @@ export default function UploadTab() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.infoBar}>
         <Text style={styles.infoBarText}>
-          Both mastersheets upload separately. SKU Mastersheet = product data. CMS Pages Mastersheet = pages + blocks +
+          Both mastersheets upload separately. SKU Mastersheet = products (incl. MaxOrderLimit), categories,
+          SubCategory/Category media (banner/video/YouTube), and hero banners. CMS Pages Mastersheet = pages + blocks +
           collections.
         </Text>
       </View>
 
       <UploadZone
         label="1 — SKU Mastersheet (.xlsx)"
-        sublabel="Imports products + categories + hero banners"
+        sublabel="Imports products + MaxOrderLimit + categories + category/subcategory media + hero banners"
         onUpload={(file) => uploadSkuMaster(file, overwrite)}
         maxMB={20}
       />

@@ -1,15 +1,16 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, ReactNode } from 'react';
 import * as cartService from '../services/cart/cartService';
 import { useUser } from './UserContext';
 import { logger } from '@/utils/logger';
 import { resolveCartLineImageUrl } from '../utils/productImage';
-import { MAX_CART_QTY_PER_ITEM } from '../utils/cartConstants';
+import { capCartQuantity, canIncreaseCartQty } from '../utils/cartConstants';
 import {
   cartLineKey,
   findCartLine,
   matchCartLine,
   resolveCartAddPayload,
 } from '../utils/cartLineIdentity';
+import * as storage from '../utils/storage';
 
 const LINE_QTY_SYNC_DEBOUNCE_MS = 200;
 
@@ -38,6 +39,8 @@ export interface CartItem {
   gstRate: number;
   discount: string;
   quantity: number;
+  /** Master Sheet MaxOrderLimit — null/undefined = unlimited */
+  maxOrderLimit?: number | null;
 }
 
 export interface CartServerPricing {
@@ -154,6 +157,7 @@ function mapServerCartToItems(cart: cartService.Cart): CartItem[] {
         ? `${Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)}%`
         : '',
       quantity: item.quantity,
+      maxOrderLimit: (item as any).maxOrderLimit ?? null,
     };
   });
 }
@@ -174,7 +178,12 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   });
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const { isAuthenticated } = useUser();
+  const { isAuthenticated, isRestoring } = useUser();
+  const isAuthenticatedRef = useRef(isAuthenticated);
+  isAuthenticatedRef.current = isAuthenticated;
+  const guestHydratedRef = useRef(false);
+  const wasAuthenticatedRef = useRef(false);
+  const persistGuestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightMutations = useRef(0);
   const lineQtySyncTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pendingLineQty = useRef<Map<string, number>>(new Map());
@@ -486,6 +495,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
 
   const syncLatestCart = useCallback(async (): Promise<boolean> => {
     if (cartMustStayEmpty.current) return true;
+    if (!isAuthenticatedRef.current) return true;
     try {
       const latest = await cartService.getCart();
       if (latest.success && latest.data) {
@@ -578,6 +588,9 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
 
   const fetchCart = useCallback(
     async (context?: cartService.CartPricingContext, opts?: { force?: boolean }) => {
+      if (!isAuthenticatedRef.current) {
+        return;
+      }
       if (opts?.force) {
         if (cartMustStayEmpty.current) {
           cancelAllPendingCartSync();
@@ -620,6 +633,9 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
 
   const flushAndRefreshCart = useCallback(
     async (context?: cartService.CartPricingContext) => {
+      if (!isAuthenticatedRef.current) {
+        return;
+      }
       if (cartMustStayEmpty.current) {
         cancelAllPendingCartSync();
       } else {
@@ -651,23 +667,127 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     checkoutCompletedAt.current = null;
   }, []);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchCart(undefined, { force: true });
-    } else {
-      cartMustStayEmpty.current = false;
-      checkoutCompletedAt.current = null;
-      recentlyRemoved.current.clear();
-      setCartItemsInternal([]);
-      setServerPricing({ itemTotal: 0, discount: 0, deliveryFee: 0, handlingCharge: 0, tax: 0, total: 0 });
+  const mergeGuestCartThenFetch = useCallback(async () => {
+    try {
+      const raw = await storage.getGuestCart();
+      if (raw) {
+        let guestItems: CartItem[] = [];
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            guestItems = parsed.filter(
+              (it: any) =>
+                it &&
+                typeof it.productId === 'string' &&
+                typeof it.variantId === 'string' &&
+                Number(it.quantity) > 0,
+            );
+          }
+        } catch {
+          guestItems = [];
+        }
+        if (guestItems.length > 0) {
+          const mergeKey = await storage.getOrCreateGuestCartMergeKey();
+          try {
+            const merged = await cartService.mergeGuestCart({
+              mergeKey,
+              items: guestItems.map((it) => ({
+                productId: it.productId,
+                variantId: it.variantId,
+                quantity: it.quantity,
+              })),
+            });
+            if (merged.success && merged.data) {
+              await applyCartResponseGuardingStaleLines(merged.data, {
+                preferLocalIfHigher: true,
+              });
+            }
+          } catch (err) {
+            logger.warn('Guest cart merge failed; will fetch server cart and keep local lines', err);
+          }
+          await storage.clearGuestCart();
+        }
+      }
+    } catch (err) {
+      logger.warn('Failed preparing guest cart merge', err);
     }
-  }, [isAuthenticated, fetchCart]);
+    await fetchCart(undefined, { force: true });
+  }, [applyCartResponseGuardingStaleLines, fetchCart]);
+
+  const hydrateGuestCart = useCallback(async () => {
+    if (guestHydratedRef.current) return;
+    guestHydratedRef.current = true;
+    try {
+      const raw = await storage.getGuestCart();
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+      if (isAuthenticatedRef.current) return;
+      const items = parsed
+        .filter(
+          (it: any) =>
+            it &&
+            typeof it.productId === 'string' &&
+            typeof it.variantId === 'string' &&
+            Number(it.quantity) > 0,
+        )
+        .map((it: CartItem) => ({
+          ...it,
+          quantity: capCartQuantity(Math.max(0, Number(it.quantity) || 0), it.maxOrderLimit),
+          image: normalizeCartItemImage(it),
+        }));
+      if (items.length > 0 && !isAuthenticatedRef.current) {
+        setCartItemsInternal(items);
+      }
+    } catch (err) {
+      logger.warn('Failed to hydrate guest cart', err);
+    }
+  }, []);
+
+  // Auth / guest lifecycle — never wipe guest cart; merge into server on login.
+  useEffect(() => {
+    if (isRestoring) return;
+
+    if (isAuthenticated) {
+      wasAuthenticatedRef.current = true;
+      guestHydratedRef.current = true;
+      void mergeGuestCartThenFetch();
+      return;
+    }
+
+    // Logged out / guest: keep in-memory cart (convert to guest) or hydrate from storage.
+    cartMustStayEmpty.current = false;
+    checkoutCompletedAt.current = null;
+    if (wasAuthenticatedRef.current) {
+      wasAuthenticatedRef.current = false;
+      // Persist whatever is currently in the cart as the guest cart.
+      const active = cartItemsInternalRef.current.filter((i) => i.quantity > 0);
+      void storage.saveGuestCart(JSON.stringify(active));
+      return;
+    }
+
+    void hydrateGuestCart();
+  }, [isAuthenticated, isRestoring, mergeGuestCartThenFetch, hydrateGuestCart]);
+
+  // Persist guest cart after local edits (debounced).
+  useEffect(() => {
+    if (isRestoring || isAuthenticated || !guestHydratedRef.current) return;
+    if (persistGuestTimer.current) clearTimeout(persistGuestTimer.current);
+    persistGuestTimer.current = setTimeout(() => {
+      const active = cartItemsInternal.filter((i) => i.quantity > 0);
+      void storage.saveGuestCart(JSON.stringify(active));
+    }, 150);
+    return () => {
+      if (persistGuestTimer.current) clearTimeout(persistGuestTimer.current);
+    };
+  }, [cartItemsInternal, isAuthenticated, isRestoring]);
 
   useEffect(
     () => () => {
       lineQtySyncTimers.current.forEach((timer) => clearTimeout(timer));
       lineQtySyncTimers.current.clear();
       pendingLineQty.current.clear();
+      if (persistGuestTimer.current) clearTimeout(persistGuestTimer.current);
     },
     [],
   );
@@ -693,13 +813,18 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
 
       setCartItemsInternal((prev) => {
         const existing = findCartLine(prev, payload.productId, payload.variantId);
-        if (existing && existing.quantity >= MAX_CART_QTY_PER_ITEM) {
+        const limit = existing?.maxOrderLimit ?? item.maxOrderLimit;
+        if (existing && !canIncreaseCartQty(existing.quantity, limit)) {
           return prev;
         }
         if (existing) {
           return prev.map((i) =>
             matchCartLine(i, payload.productId, payload.variantId)
-              ? { ...i, quantity: Math.min(MAX_CART_QTY_PER_ITEM, i.quantity + 1) }
+              ? {
+                  ...i,
+                  quantity: capCartQuantity(i.quantity + 1, limit),
+                  maxOrderLimit: limit ?? i.maxOrderLimit,
+                }
               : i,
           );
         }
@@ -710,11 +835,20 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
             ...payload,
             image: normalizedImage,
             quantity: 1,
+            maxOrderLimit: item.maxOrderLimit ?? null,
           },
         ];
       });
 
       void (async () => {
+        // Guest / unauthenticated: local cart is the source of truth (persisted).
+        if (!isAuthenticatedRef.current) {
+          cartMustStayEmpty.current = false;
+          checkoutCompletedAt.current = null;
+          endMutation();
+          return;
+        }
+
         const startingNewOrderSession = cartMustStayEmpty.current;
         try {
           if (startingNewOrderSession) {
@@ -750,23 +884,10 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
           }
           checkoutCompletedAt.current = null;
         } catch (err) {
-          logger.warn('addToCart API failed, syncing latest cart', err);
-          const synced = await syncLatestCart();
-          if (!synced) {
-            setCartItemsInternal((prev) => {
-              const line = findCartLine(prev, payload.productId, payload.variantId);
-              if (!line || line.quantity <= 1) {
-                return prev.filter(
-                  (i) => !matchCartLine(i, payload.productId, payload.variantId),
-                );
-              }
-              return prev.map((i) =>
-                matchCartLine(i, payload.productId, payload.variantId)
-                  ? { ...i, quantity: i.quantity - 1 }
-                  : i,
-              );
-            });
-          }
+          // Keep optimistic local cart — never roll back on API/network failure.
+          // Rolling back caused View Cart to flash then disappear (guest 401 / offline).
+          logger.warn('addToCart API failed; keeping local cart until next successful sync', err);
+          await syncLatestCart();
         } finally {
           endMutation();
         }
@@ -810,6 +931,11 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         return;
       }
 
+      if (!isAuthenticatedRef.current) {
+        endMutation();
+        return;
+      }
+
       const run = isMongoLineId(removedSnapshot.id)
         ? cartService.removeFromCart(removedSnapshot.id!, {
             productId: linePayload.productId,
@@ -835,7 +961,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         })
         .catch(async (err) => {
           try {
-            logger.warn('removeFromCart API failed, syncing latest cart', err);
+            logger.warn('removeFromCart API failed; keeping local removal', err);
             await syncLatestCart();
           } finally {
             endMutation();
@@ -856,7 +982,8 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   const updateQuantity = useCallback(
     (productId: string, variantId: string, quantity: number) => {
       const linePayload = resolveCartAddPayload(productId, variantId);
-      const cappedQuantity = Math.min(MAX_CART_QTY_PER_ITEM, quantity);
+      const existingLine = findCartLine(cartItemsInternalRef.current, linePayload.productId, linePayload.variantId);
+      const cappedQuantity = capCartQuantity(quantity, existingLine?.maxOrderLimit);
       if (quantity <= 0) {
         removeFromCart(linePayload.productId, linePayload.variantId);
         return;
@@ -901,6 +1028,11 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
             return;
           }
 
+          if (!isAuthenticatedRef.current) {
+            endMutation();
+            return;
+          }
+
           cartService
             .updateCartItemByProduct({
               productId: linePayload.productId,
@@ -909,7 +1041,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
             })
             .then(async (res) => {
               try {
-                if (!applyMutationCartResponse(res, { preferLocalIfHigher: true })) {
+                if (!(await applyMutationCartResponse(res, { preferLocalIfHigher: true }))) {
                   await syncLatestCart();
                 }
               } finally {
@@ -918,7 +1050,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
             })
             .catch(async (err) => {
               try {
-                logger.warn('updateCartItem API failed, syncing latest cart', err);
+                logger.warn('updateCartItem API failed; keeping local quantity', err);
                 await syncLatestCart();
               } finally {
                 endMutation();
@@ -977,8 +1109,12 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
 
     recentlyRemoved.current.clear();
     applyEmptyServerCart();
+    void storage.clearGuestCart();
 
     try {
+      if (!isAuthenticatedRef.current) {
+        return;
+      }
       let clearedOnServer = false;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
@@ -1001,24 +1137,44 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     }
   }, [applyEmptyServerCart, beginMutation, cancelAllPendingCartSync, endMutation]);
 
-  const value: CartContextType = {
-    cartItems,
-    serverPricing,
-    addToCart,
-    updateQuantity,
-    removeFromCart,
-    getLineQuantity,
-    getItemQuantity,
-    getTotalPrice,
-    getTotalItems,
-    clearCart: clearCartFn,
-    releaseEmptyCartLock,
-    refreshCart,
-    refreshCartWithPricingContext,
-    flushAndRefreshCart,
-    loading,
-    syncing,
-  };
+  const value: CartContextType = useMemo(
+    () => ({
+      cartItems,
+      serverPricing,
+      addToCart,
+      updateQuantity,
+      removeFromCart,
+      getLineQuantity,
+      getItemQuantity,
+      getTotalPrice,
+      getTotalItems,
+      clearCart: clearCartFn,
+      releaseEmptyCartLock,
+      refreshCart,
+      refreshCartWithPricingContext,
+      flushAndRefreshCart,
+      loading,
+      syncing,
+    }),
+    [
+      cartItems,
+      serverPricing,
+      addToCart,
+      updateQuantity,
+      removeFromCart,
+      getLineQuantity,
+      getItemQuantity,
+      getTotalPrice,
+      getTotalItems,
+      clearCartFn,
+      releaseEmptyCartLock,
+      refreshCart,
+      refreshCartWithPricingContext,
+      flushAndRefreshCart,
+      loading,
+      syncing,
+    ],
+  );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 };

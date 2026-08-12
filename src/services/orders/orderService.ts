@@ -45,15 +45,25 @@ export interface Order {
     id: string;
     type: 'card' | 'upi' | 'cash' | 'wallet' | 'digital';
     last4?: string;
+    instrument?: string;
+    displayLabel?: string;
+    display?: string;
+    detailDisplay?: string;
+    lines?: Array<{ label: string; amount?: number | null }>;
   };
+  paymentMethodDisplay?: string;
   paymentStatus: 'paid' | 'pending' | 'failed' | 'cod_pending';
   itemTotal: number;
   handlingCharge: number;
   deliveryFee: number;
   discount: number;
   totalBill: number;
+  walletDeduction?: number;
+  onlineAmountDue?: number;
+  requiresOnlinePayment?: boolean;
   createdAt: string;
   estimatedDelivery?: string;
+  estimatedDeliveryMessage?: string;
   timeline?: TimelineEntry[];
   ratingScore?: number;
   cancellationReason?: string;
@@ -115,11 +125,30 @@ export const createOrder = async (data: CreateOrderRequest): Promise<ApiResponse
   return api.post<Order>(endpoints.orders.create, data);
 };
 
+export interface CanCancelResult {
+  allowed: boolean;
+  reason?: string;
+  cancellationFee?: number;
+  freeWindowMinutes?: number;
+}
+
 /**
- * Cancel order
+ * Check whether the customer may cancel this order (fee / free window).
  */
-export const cancelOrder = async (id: string): Promise<ApiResponse<Order>> => {
-  return api.post<Order>(endpoints.orders.cancel(id));
+export const fetchCanCancel = async (id: string): Promise<ApiResponse<CanCancelResult>> => {
+  return api.get<CanCancelResult>(endpoints.orders.canCancel(id));
+};
+
+/**
+ * Cancel order (optional reason for analytics / support).
+ */
+export const cancelOrder = async (
+  id: string,
+  reason?: string
+): Promise<ApiResponse<Order & { refundAmount?: number }>> => {
+  return api.post<Order & { refundAmount?: number }>(endpoints.orders.cancel(id), {
+    ...(reason ? { reason } : {}),
+  });
 };
 
 /**
