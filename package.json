@@ -23,6 +23,7 @@
     "verify:push": "node scripts/verify-push-p0.cjs",
     "eas-build-post-install": "node scripts/verify-rnfb-packages.cjs",
     "serve:apk": "node apk/serve-apk.cjs",
+    "assets:ensure": "node scripts/ensure-raster-assets.mjs",
     "assets:report": "node scripts/report-missing-assets.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -30,7 +31,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "postinstall": "node scripts/patch-expo-cli-fetch-cache.mjs",
+    "postinstall": "node scripts/patch-expo-cli-fetch-cache.mjs && node scripts/patch-expo-cli-network-fallback.mjs && node scripts/ensure-raster-assets.mjs",
     "prepare": "node -e \"if (!process.env.EAS_BUILD && !process.env.CI) require('child_process').execSync('husky',{stdio:'inherit'})\""
   },
   "dependencies": {

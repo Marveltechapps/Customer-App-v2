@@ -90,6 +90,10 @@ const preferredPort = Number(
 );
 const port = await findAvailablePort(preferredPort);
 process.env.RCT_METRO_PORT = String(port);
+// Avoid crashing Metro when Expo API is unreachable (transient network / firewall).
+if (!process.env.EXPO_NO_DEPENDENCY_VALIDATION && !process.env.EXPO_OFFLINE) {
+  process.env.EXPO_NO_DEPENDENCY_VALIDATION = '1';
+}
 
 const expoCli = path.join(projectRoot, 'node_modules', 'expo', 'bin', 'cli');
 const args = [expoCli, 'start', ...extraArgs, '--port', String(port)];

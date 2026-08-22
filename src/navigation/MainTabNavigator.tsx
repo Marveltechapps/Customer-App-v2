@@ -1,14 +1,33 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import Home from '../screens/Home';
-import CategoriesExpo from '../screens/CategoriesExpo';
-import Checkout from '../screens/Checkout';
 import BottomNavigationBar from '../components/layout/BottomNavigationBar';
 import type { MainTabParamList } from '../types/navigation';
 import { useNotificationDeepLink } from '../hooks/useNotificationDeepLink';
 
+const Home = React.lazy(() => import('../screens/Home'));
+const CategoriesExpo = React.lazy(() => import('../screens/CategoriesExpo'));
+const Checkout = React.lazy(() => import('../screens/Checkout'));
+
+const TabLoading = () => null;
+
 const Tab = createBottomTabNavigator<MainTabParamList>();
+
+function LazyTabScreen({
+  LazyComponent,
+}: {
+  LazyComponent: React.LazyExoticComponent<React.ComponentType<object>>;
+}) {
+  return (
+    <Suspense fallback={<TabLoading />}>
+      <LazyComponent />
+    </Suspense>
+  );
+}
+
+const HomeScreen = () => <LazyTabScreen LazyComponent={Home} />;
+const CategoriesScreen = () => <LazyTabScreen LazyComponent={CategoriesExpo} />;
+const CartScreen = () => <LazyTabScreen LazyComponent={Checkout} />;
 
 // Custom tab bar component that uses our BottomNavigationBar
 function CustomTabBar({ state, descriptors, navigation }: any) {
@@ -75,9 +94,9 @@ const MainTabNavigator: React.FC = () => {
         headerShown: false,
       }}
     >
-      <Tab.Screen name="Home" component={Home} />
-      <Tab.Screen name="Categories" component={CategoriesExpo} />
-      <Tab.Screen name="Cart" component={Checkout} />
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Categories" component={CategoriesScreen} />
+      <Tab.Screen name="Cart" component={CartScreen} />
     </Tab.Navigator>
   );
 };

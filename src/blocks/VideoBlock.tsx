@@ -15,9 +15,16 @@ interface VideoBlockStyle {
 
 /** Full-width, responsive video block for landing pages (CMS-driven `videoBlock`). */
 export default function VideoBlock({ config }: BlockProps) {
-  const { width: screenWidth, getVideoHeroHeight, scale } = useResponsive();
-
   const videoUrl = ((config?.videoUrl as string) || (config?.url as string) || '').trim();
+  if (!videoUrl) return null;
+  return <VideoBlockPlayer config={config} videoUrl={videoUrl} />;
+}
+
+function VideoBlockPlayer({
+  config,
+  videoUrl,
+}: BlockProps & { videoUrl: string }) {
+  const { width: screenWidth, getVideoHeroHeight, scale } = useResponsive();
   const blockStyle = (config?.style as VideoBlockStyle | undefined) ?? undefined;
   const autoplay = config?.autoplay !== false;
   const loop = config?.loop !== false;
@@ -35,10 +42,7 @@ export default function VideoBlock({ config }: BlockProps) {
     return getVideoHeroHeight();
   }, [blockStyle?.height, blockStyle?.aspectRatio, screenWidth, getVideoHeroHeight]);
 
-  const videoSource: VideoSource = useMemo(
-    () => (videoUrl ? { uri: videoUrl } : null),
-    [videoUrl],
-  );
+  const videoSource: VideoSource = useMemo(() => ({ uri: videoUrl }), [videoUrl]);
 
   const player = useVideoPlayer(videoSource, (p) => {
     p.loop = loop;

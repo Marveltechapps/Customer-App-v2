@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
-
-const selorgLogo = require('../../../assets/selorg-logo.png');
+import { View, Text, StyleSheet } from 'react-native';
+import SelorgLogo from '@/assets/images/selorg-logo.svg';
 
 /** Logo + welcome copy shown between the green header and login form card. */
 export default function LoginWelcomeSection() {
@@ -29,11 +28,6 @@ export default function LoginWelcomeSection() {
           shadowRadius: 6,
           elevation: 3,
         },
-        logo: {
-          width: 44,
-          height: 44,
-          resizeMode: 'contain',
-        },
         title: {
           fontSize: 20,
           fontWeight: '700',
@@ -55,7 +49,7 @@ export default function LoginWelcomeSection() {
   return (
     <View style={styles.wrap}>
       <View style={styles.logoRing}>
-        <Image source={selorgLogo} style={styles.logo} accessibilityLabel="Selorg logo" />
+        <SelorgLogo width={44} height={44} accessibilityLabel="Selorg logo" />
       </View>
       <Text style={styles.title}>Welcome to Selorg</Text>
       <Text style={styles.subtitle}>
